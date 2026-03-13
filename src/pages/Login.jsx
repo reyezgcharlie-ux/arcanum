@@ -52,9 +52,20 @@ export default function Login() {
         const r = await signInWithEmailAndPassword(auth, email, password);
         await saveUser(r.user, null);
       }
-    } catch (e) {
-      setError(e.message.replace("Firebase: ", "").replace(/\(.*\)/, "").trim());
-    }
+   } catch (e) {
+  console.error("ARCANUM ERROR:", e);
+  const codes = {
+    "auth/email-already-in-use": "Este email ya está registrado",
+    "auth/invalid-email": "Email inválido",
+    "auth/weak-password": "La contraseña debe tener al menos 6 caracteres",
+    "auth/user-not-found": "Usuario no encontrado",
+    "auth/wrong-password": "Contraseña incorrecta",
+    "auth/too-many-requests": "Demasiados intentos. Espera unos minutos",
+    "auth/network-request-failed": "Error de red. Verifica tu conexión",
+    "permission-denied": "Error de permisos en Firestore. Verifica las reglas",
+  };
+  setError(codes[e.code] || e.code || e.message || "Error desconocido");
+}
     setLoading(false);
   };
 
