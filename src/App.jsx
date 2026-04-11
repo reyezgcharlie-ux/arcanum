@@ -12,7 +12,7 @@ export default function App() {
     return onAuthStateChanged(auth, (u) => { setUser(u); setLoading(false); });
   }, []);
 
-  if (loading) return <div className="loading-screen">CONECTANDO A SYNAPT NETWORK...</div>;
+  if (loading) return <div className="loading-screen">SINCRONIZANDO NODOS...</div>;
 
   return (
     <>
@@ -25,26 +25,55 @@ export default function App() {
 }
 
 const SynaptNetwork = ({ user }) => {
-  const [stations, setStations] = useState([
-    { id: 'synapt-main', name: "SYNAPT Radio", genre: "MAIN HUB", url: "https://stream.synfm.online/live" }
-  ]);
-  const [currentStation, setCurrentStation] = useState(stations[0]);
+  const [stations, setStations] = useState([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [currentStation, setCurrentStation] = useState({ id: 'synapt-main', name: "SYNAPT Radio", genre: "MAIN HUB", url: "https://stream.synfm.online/live" });
+  
+  // Estado elevado para los mensajes y usuarios activos
+  const [messages, setMessages] = useState([]);
+  const [activeUsers, setActiveUsers] = useState([]);
 
-  // Cargar estaciones REALES de todo el mundo mediante API
+  // Carga de API de Radio
   useEffect(() => {
-    fetch('https://de1.api.radio-browser.info/json/stations/search?limit=40&order=clickcount&reverse=true&hidebroken=true')
+    fetch('https://de1.api.radio-browser.info/json/stations/search?limit=100&order=clickcount&reverse=true&hidebroken=true')
       .then(res => res.json())
       .then(data => {
         const liveStations = data.filter(s => s.url_resolved).map(s => ({
           id: s.stationuuid,
-          name: s.name.substring(0, 22).trim(),
+          name: s.name.substring(0, 25).trim(),
           genre: (s.tags.split(',')[0] || "GLOBAL").toUpperCase(),
           url: s.url_resolved
         }));
-        // Mantiene SYNAPT en el top y añade las reales
-        setStations(prev => [prev[0], ...liveStations]);
-      })
-      .catch(err => console.error("Error cargando directorio de radio:", err));
+        setStations([{ id: 'synapt-main', name: "SYNAPT Radio", genre: "MAIN HUB", url: "https://stream.synfm.online/live" }, ...liveStations]);
+      }).catch(err => console.error("Error API:", err));
+  }, []);
+
+  // Filtro de Búsqueda
+  const filteredStations = stations.filter(s => 
+    s.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    s.genre.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  // Lógica de Chat y extracción de Usuarios Activos
+  useEffect(() => {
+    if (!db) return;
+    const q = query(collection(db, "public_feed"), orderBy("createdAt", "asc"), limit(50));
+    const unsub = onSnapshot(q, (snap) => {
+      const msgs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      setMessages(msgs);
+      
+      // Extraer usuarios únicos para el panel izquierdo
+      const uniqueUsers = [];
+      const map = new Map();
+      for (const msg of msgs) {
+        if (!map.has(msg.uid)) {
+          map.set(msg.uid, true);
+          uniqueUsers.push({ uid: msg.uid, name: msg.name, photo: msg.photo || null });
+        }
+      }
+      setActiveUsers(uniqueUsers.reverse());
+    });
+    return () => unsub();
   }, []);
 
   return (
@@ -65,10 +94,9 @@ const SynaptNetwork = ({ user }) => {
       </nav>
 
       <div className="main-grid">
-        {/* IZQUIERDA: PERFIL Y TOP 8 */}
+        {/* PANEL IZQUIERDO: PERFIL Y RADAR */}
         <aside className="glass-panel profile-panel">
           <div className="panel-header">IDENTIDAD OPERATIVA</div>
-          
           <div className="profile-info">
             <img src={user.photoURL} alt="avatar" className="main-avatar" />
             <h2 className="user-name">{user.displayName}</h2>
@@ -76,29 +104,30 @@ const SynaptNetwork = ({ user }) => {
           </div>
           
           <div className="top8-container">
-            <div className="panel-header">TOP 8 OPERADORES</div>
+            <div className="panel-header">RADAR DE OPERADORES ({activeUsers.length})</div>
             <div className="top8-grid">
-              {[1,2,3,4,5,6,7,8].map(i => (
+              {activeUsers.length === 0 && <span style={{fontSize:'9px', color:'#666'}}>Escaneando frecuencias...</span>}
+              {activeUsers.map((u, i) => (
                 <div key={i} className="top8-card">
-                  <div className="top8-avatar"></div>
-                  <span className="top8-name">OP_0{i}</span>
+                  <div className="top8-avatar" style={{backgroundImage: `url(${u.photo || 'https://via.placeholder.com/40/111/E50914'})`}}></div>
+                  <span className="top8-name">{u.name.split(' ')[0]}</span>
                 </div>
               ))}
             </div>
           </div>
         </aside>
 
-        {/* CENTRO: FEED MULTIJUGADOR REAL */}
+        {/* PANEL CENTRAL: FEED MULTIMEDIA */}
         <main className="glass-panel chat-panel">
           <div className="panel-header" style={{ borderBottom: '1px solid #1a1a1a', paddingBottom: '15px' }}>
             FEED GLOBAL PÚBLICO
           </div>
-          <ChatRoom user={user} />
+          <ChatRoom user={user} messages={messages} />
         </main>
 
-        {/* DERECHA: DIRECTORIO SYNFM REAL */}
+        {/* PANEL DERECHO: DIRECTORIO SYNFM CON BUSCADOR */}
         <aside className="glass-panel media-panel">
-          <div className="panel-header">SYNFM.ONLINE // LIVE DIRECTORY</div>
+          <div className="panel-header">SYNFM.ONLINE // MEDIA HUB</div>
           
           <div className="player-card">
             <div className="now-playing-badge">
@@ -110,8 +139,17 @@ const SynaptNetwork = ({ user }) => {
             <audio controls autoPlay className="audio-player" src={currentStation.url} />
           </div>
 
+          <div style={{padding: '0 20px 10px 20px'}}>
+            <input 
+              className="search-input" 
+              placeholder="Buscar señal o género..." 
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </div>
+
           <div className="directory-list custom-scroll">
-            {stations.map((station, index) => (
+            {filteredStations.map((station, index) => (
               <div 
                 key={station.id + index} 
                 className={`station-item ${currentStation.url === station.url ? 'active-station' : ''}`}
@@ -131,38 +169,46 @@ const SynaptNetwork = ({ user }) => {
   );
 };
 
-// --- CHAT EN TIEMPO REAL MULTIJUGADOR ---
-const ChatRoom = ({ user }) => {
-  const [messages, setMessages] = useState([]);
+// --- CHAT CON SOPORTE MULTIMEDIA ---
+const ChatRoom = ({ user, messages }) => {
   const [input, setInput] = useState('');
   const dummy = useRef();
 
-  // Conectado a 'public_feed' para evitar bloqueos de participantes
   useEffect(() => {
-    if (!db) return;
-    const q = query(collection(db, "public_feed"), orderBy("createdAt", "asc"), limit(50));
-    const unsub = onSnapshot(q, (snap) => {
-      setMessages(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      dummy.current?.scrollIntoView({ behavior: 'smooth' });
-    });
-    return () => unsub();
-  }, []);
+    dummy.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
 
-  const sendMsg = async (e) => {
-    e.preventDefault();
-    if (!input.trim()) return;
+  const sendMsg = async (e, forceText = null) => {
+    if (e) e.preventDefault();
+    const textToSend = forceText || input;
+    if (!textToSend.trim()) return;
+    
     try {
       await addDoc(collection(db, "public_feed"), {
-        text: input,
+        text: textToSend,
         uid: user.uid,
         name: user.displayName,
+        photo: user.photoURL,
         createdAt: serverTimestamp()
       });
       setInput('');
     } catch (error) {
-      alert("Error: Asegúrate de haber añadido la regla de public_feed en Firestore.");
       console.error(error);
     }
+  };
+
+  const handleSendImage = () => {
+    const url = prompt("Pega el enlace de la imagen (URL):");
+    if (url) sendMsg(null, url);
+  };
+
+  // Detector de imágenes para renderizarlas en el chat
+  const renderContent = (text) => {
+    const isImage = text.match(/\.(jpeg|jpg|gif|png|webp)(\?.*)?$/i) != null;
+    if (isImage) {
+      return <img src={text} alt="media compartida" className="chat-image" />;
+    }
+    return text;
   };
 
   return (
@@ -172,15 +218,16 @@ const ChatRoom = ({ user }) => {
         {messages.map(m => (
           <div key={m.id} className={`message-row ${m.uid === user.uid ? 'me' : 'them'}`}>
             <div className="msg-author">{m.name}</div>
-            <div className="msg-bubble">{m.text}</div>
+            <div className="msg-bubble">{renderContent(m.text)}</div>
           </div>
         ))}
         <div ref={dummy}></div>
       </div>
-      <form onSubmit={sendMsg} className="chat-input-area">
+      <form onSubmit={(e) => sendMsg(e)} className="chat-input-area">
+        <button type="button" onClick={handleSendImage} className="btn-media" title="Enviar Foto">📷</button>
         <input 
           className="chat-input" 
-          placeholder="Transmite al feed global..." 
+          placeholder="Transmite mensaje o URL de imagen..." 
           value={input} 
           onChange={(e) => setInput(e.target.value)} 
         />
@@ -202,6 +249,7 @@ const Login = () => (
   </div>
 );
 
+// CSS MEJORADO
 const ArcanumStyles = () => (
   <style>{`
     :root {
@@ -215,30 +263,11 @@ const ArcanumStyles = () => (
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
     
-    body {
-      background-color: var(--bg-color);
-      color: var(--text-main);
-      font-family: 'Inter', system-ui, sans-serif;
-      overflow: hidden;
-      background-image: radial-gradient(circle at top, #110000 0%, #000 60%);
-    }
+    body { background-color: var(--bg-color); color: var(--text-main); font-family: 'Inter', system-ui, sans-serif; overflow: hidden; background-image: radial-gradient(circle at top, #110000 0%, #000 60%); }
 
-    .loading-screen, .login-screen {
-      height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
+    .loading-screen, .login-screen { height: 100vh; display: flex; align-items: center; justify-content: center; }
 
-    .login-card {
-      text-align: center;
-      background: var(--panel-bg);
-      padding: 60px;
-      border: 1px solid var(--border-color);
-      border-radius: 4px;
-      box-shadow: 0 0 40px rgba(229,9,20,0.1);
-    }
-
+    .login-card { text-align: center; background: var(--panel-bg); padding: 60px; border: 1px solid var(--border-color); border-radius: 4px; box-shadow: 0 0 40px rgba(229,9,20,0.1); }
     .login-logo { font-size: 50px; font-weight: 900; color: var(--accent-red); letter-spacing: 10px; margin-bottom: 10px; text-shadow: 0 0 15px rgba(229,9,20,0.4); }
     .login-sub { color: var(--text-muted); letter-spacing: 4px; font-size: 11px; margin-bottom: 40px; }
     .btn-login { background: var(--text-main); color: var(--bg-color); border: none; padding: 15px 40px; font-weight: 900; cursor: pointer; border-radius: 2px; }
@@ -258,16 +287,16 @@ const ArcanumStyles = () => (
     .panel-header { font-size: 10px; font-weight: bold; color: var(--text-muted); letter-spacing: 2px; padding: 20px; text-transform: uppercase; }
 
     .profile-info { display: flex; flex-direction: column; align-items: center; padding: 0 20px 20px 20px; border-bottom: 1px solid var(--border-color); }
-    .main-avatar { width: 90px; height: 90px; border-radius: 50%; border: 2px solid var(--accent-red); padding: 3px; margin-bottom: 15px; background: #000; }
-    .user-name { font-size: 16px; font-weight: 900; margin-bottom: 8px; letter-spacing: 1px; }
+    .main-avatar { width: 90px; height: 90px; border-radius: 50%; border: 2px solid var(--accent-red); padding: 3px; margin-bottom: 15px; background: #000; object-fit: cover; }
+    .user-name { font-size: 16px; font-weight: 900; margin-bottom: 8px; letter-spacing: 1px; text-align: center; }
     .status-pill { border: 1px solid #0f0; color: #0f0; background: rgba(0,255,0,0.05); font-size: 9px; padding: 4px 12px; border-radius: 20px; font-weight: bold; }
 
-    .top8-container { flex: 1; display: flex; flex-direction: column; }
-    .top8-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; padding: 0 20px; }
+    .top8-container { flex: 1; display: flex; flex-direction: column; overflow-y: auto; }
+    .top8-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; padding: 0 20px 20px 20px; }
     .top8-card { display: flex; flex-direction: column; align-items: center; gap: 8px; cursor: pointer; }
-    .top8-avatar { width: 40px; height: 40px; background: #111; border: 1px solid #222; border-radius: 4px; transition: 0.2s; }
-    .top8-card:hover .top8-avatar { border-color: var(--accent-red); }
-    .top8-name { font-size: 9px; color: var(--text-muted); font-family: monospace; }
+    .top8-avatar { width: 50px; height: 50px; background-color: #111; background-size: cover; background-position: center; border: 1px solid #333; border-radius: 4px; transition: 0.2s; }
+    .top8-card:hover .top8-avatar { border-color: var(--accent-red); box-shadow: 0 0 10px rgba(229,9,20,0.3); }
+    .top8-name { font-size: 9px; color: var(--text-muted); font-family: monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 
     .chat-wrapper { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
     .chat-feed { flex: 1; padding: 20px; overflow-y: auto; }
@@ -275,21 +304,27 @@ const ArcanumStyles = () => (
     .message-row.me { align-items: flex-end; }
     .message-row.them { align-items: flex-start; }
     .msg-author { font-size: 9px; color: var(--text-muted); margin-bottom: 6px; font-weight: bold; text-transform: uppercase; }
-    .msg-bubble { padding: 12px 18px; font-size: 13px; line-height: 1.5; max-width: 85%; }
+    .msg-bubble { padding: 12px 18px; font-size: 13px; line-height: 1.5; max-width: 85%; word-wrap: break-word; }
     .me .msg-bubble { background: linear-gradient(135deg, #E50914, #B80710); color: #fff; border-radius: 12px 12px 0 12px; box-shadow: 0 5px 15px rgba(229,9,20,0.2); }
     .them .msg-bubble { background: #111; border: 1px solid var(--border-color); color: #fff; border-radius: 0 12px 12px 12px; }
+    .chat-image { max-width: 100%; border-radius: 4px; border: 1px solid #333; margin-top: 5px; }
 
-    .chat-input-area { display: flex; background: #000; border-top: 1px solid var(--border-color); padding: 15px; }
-    .chat-input { flex: 1; background: #050505; border: 1px solid #222; color: #fff; padding: 12px 15px; border-radius: 2px 0 0 2px; outline: none; font-size: 13px; }
+    .chat-input-area { display: flex; background: #000; border-top: 1px solid var(--border-color); padding: 15px; gap: 5px; }
+    .btn-media { background: #111; border: 1px solid #333; color: #fff; padding: 0 15px; border-radius: 2px 0 0 2px; cursor: pointer; transition: 0.2s; }
+    .btn-media:hover { background: #222; }
+    .chat-input { flex: 1; background: #050505; border: 1px solid #222; border-left: none; color: #fff; padding: 12px 15px; outline: none; font-size: 13px; }
     .btn-send { background: var(--accent-red); color: #fff; border: none; padding: 0 25px; font-weight: 900; cursor: pointer; border-radius: 0 2px 2px 0; font-size: 12px; }
 
     .media-panel { padding-bottom: 0; }
-    .player-card { background: #000; border: 1px solid var(--border-color); margin: 0 20px 20px 20px; padding: 20px; border-radius: 4px; box-shadow: inset 0 0 20px rgba(0,0,0,0.5); }
+    .player-card { background: #000; border: 1px solid var(--border-color); margin: 0 20px 15px 20px; padding: 20px; border-radius: 4px; box-shadow: inset 0 0 20px rgba(0,0,0,0.5); }
     .now-playing-badge { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; color: var(--accent-red); font-size: 9px; font-weight: 900; letter-spacing: 1px; }
     .live-dot { width: 6px; height: 6px; background: var(--accent-red); border-radius: 50%; animation: pulse 1.5s infinite; }
     .station-name { font-size: 14px; margin-bottom: 4px; font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .station-genre { font-size: 10px; color: var(--text-muted); margin-bottom: 15px; }
     .audio-player { width: 100%; height: 35px; outline: none; }
+
+    .search-input { width: 100%; background: #000; border: 1px solid #222; padding: 10px; color: #fff; border-radius: 4px; font-size: 11px; outline: none; }
+    .search-input:focus { border-color: var(--accent-red); }
 
     .directory-list { flex: 1; overflow-y: auto; padding: 0 20px 20px 20px; display: flex; flex-direction: column; gap: 8px; }
     .station-item { display: flex; align-items: center; gap: 12px; padding: 10px; background: transparent; border: 1px solid transparent; border-radius: 4px; cursor: pointer; transition: 0.2s; }
