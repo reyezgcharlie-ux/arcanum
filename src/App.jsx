@@ -1,7 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import { auth, googleProvider, db } from './firebase';
-import { signInWithPopup, onAuthStateChanged, signOut } from 'firebase/auth';
+import { 
+  signInWithPopup, 
+  onAuthStateChanged, 
+  signOut, 
+  createUserWithEmailAndPassword, 
+  signInWithEmailAndPassword, 
+  updateProfile 
+} from 'firebase/auth';
 import { collection, addDoc, query, onSnapshot, orderBy, serverTimestamp, limit } from 'firebase/firestore';
 
 export default function App() {
@@ -24,16 +31,16 @@ export default function App() {
   );
 }
 
+// --- MAIN OS INTERFACE ---
 const SynaptNetwork = ({ user }) => {
   const [stations, setStations] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [currentStation, setCurrentStation] = useState({ id: 'synapt-main', name: "SYNAPT Radio", genre: "MAIN HUB", url: "https://stream.synfm.online/live" });
   
-  // Estado elevado para los mensajes y usuarios activos
   const [messages, setMessages] = useState([]);
   const [activeUsers, setActiveUsers] = useState([]);
 
-  // Carga de API de Radio
+  // API de Radio Mundial
   useEffect(() => {
     fetch('https://de1.api.radio-browser.info/json/stations/search?limit=100&order=clickcount&reverse=true&hidebroken=true')
       .then(res => res.json())
@@ -44,17 +51,16 @@ const SynaptNetwork = ({ user }) => {
           genre: (s.tags.split(',')[0] || "GLOBAL").toUpperCase(),
           url: s.url_resolved
         }));
-        setStations([{ id: 'synapt-main', name: "SYNAPT Radio", genre: "MAIN HUB", url: "https://stream.synfm.online/live" }, ...liveStations]);
-      }).catch(err => console.error("Error API:", err));
+        setStations([{ id: 'synapt-main', name: "SYNAPT Radio Live", genre: "MAIN HUB", url: "https://stream.synfm.online/live" }, ...liveStations]);
+      }).catch(err => console.error("Error API Radio:", err));
   }, []);
 
-  // Filtro de Búsqueda
   const filteredStations = stations.filter(s => 
     s.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
     s.genre.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  // Lógica de Chat y extracción de Usuarios Activos
+  // Chat & Radar
   useEffect(() => {
     if (!db) return;
     const q = query(collection(db, "public_feed"), orderBy("createdAt", "asc"), limit(50));
@@ -62,7 +68,6 @@ const SynaptNetwork = ({ user }) => {
       const msgs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       setMessages(msgs);
       
-      // Extraer usuarios únicos para el panel izquierdo
       const uniqueUsers = [];
       const map = new Map();
       for (const msg of msgs) {
@@ -98,19 +103,19 @@ const SynaptNetwork = ({ user }) => {
         <aside className="glass-panel profile-panel">
           <div className="panel-header">IDENTIDAD OPERATIVA</div>
           <div className="profile-info">
-            <img src={user.photoURL} alt="avatar" className="main-avatar" />
-            <h2 className="user-name">{user.displayName}</h2>
+            <img src={user.photoURL || `https://api.dicebear.com/7.x/identicon/svg?seed=${user.email}`} alt="avatar" className="main-avatar" />
+            <h2 className="user-name">{user.displayName || "Operador_Desconocido"}</h2>
             <div className="status-pill">● ONLINE</div>
           </div>
           
-          <div className="top8-container">
+          <div className="top8-container custom-scroll">
             <div className="panel-header">RADAR DE OPERADORES ({activeUsers.length})</div>
             <div className="top8-grid">
               {activeUsers.length === 0 && <span style={{fontSize:'9px', color:'#666'}}>Escaneando frecuencias...</span>}
               {activeUsers.map((u, i) => (
                 <div key={i} className="top8-card">
-                  <div className="top8-avatar" style={{backgroundImage: `url(${u.photo || 'https://via.placeholder.com/40/111/E50914'})`}}></div>
-                  <span className="top8-name">{u.name.split(' ')[0]}</span>
+                  <div className="top8-avatar" style={{backgroundImage: `url(${u.photo || `https://api.dicebear.com/7.x/identicon/svg?seed=${u.uid}`})`}}></div>
+                  <span className="top8-name">{u.name?.split(' ')[0] || "OP"}</span>
                 </div>
               ))}
             </div>
@@ -169,7 +174,7 @@ const SynaptNetwork = ({ user }) => {
   );
 };
 
-// --- CHAT CON SOPORTE MULTIMEDIA ---
+// --- MODULO CHAT ---
 const ChatRoom = ({ user, messages }) => {
   const [input, setInput] = useState('');
   const dummy = useRef();
@@ -187,27 +192,22 @@ const ChatRoom = ({ user, messages }) => {
       await addDoc(collection(db, "public_feed"), {
         text: textToSend,
         uid: user.uid,
-        name: user.displayName,
-        photo: user.photoURL,
+        name: user.displayName || "Operador",
+        photo: user.photoURL || `https://api.dicebear.com/7.x/identicon/svg?seed=${user.email}`,
         createdAt: serverTimestamp()
       });
       setInput('');
-    } catch (error) {
-      console.error(error);
-    }
+    } catch (error) { console.error(error); }
   };
 
   const handleSendImage = () => {
-    const url = prompt("Pega el enlace de la imagen (URL):");
+    const url = prompt("Pega el enlace de la imagen (URL válida acabada en .jpg, .png, etc):");
     if (url) sendMsg(null, url);
   };
 
-  // Detector de imágenes para renderizarlas en el chat
   const renderContent = (text) => {
     const isImage = text.match(/\.(jpeg|jpg|gif|png|webp)(\?.*)?$/i) != null;
-    if (isImage) {
-      return <img src={text} alt="media compartida" className="chat-image" />;
-    }
+    if (isImage) return <img src={text} alt="media compartida" className="chat-image" />;
     return text;
   };
 
@@ -237,19 +237,97 @@ const ChatRoom = ({ user, messages }) => {
   );
 };
 
-const Login = () => (
-  <div className="login-screen">
-    <div className="login-card">
-      <h1 className="login-logo">ARCANUM</h1>
-      <p className="login-sub">SYNAPT_NETWORK_GATEWAY</p>
-      <button className="btn-login" onClick={() => signInWithPopup(auth, googleProvider)}>
-        INICIAR SESIÓN DE RED
-      </button>
-    </div>
-  </div>
-);
+// --- MODULO LOGIN CON REGISTRO NATIVO ---
+const Login = () => {
+  const [isLoginView, setIsLoginView] = useState(true);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [username, setUsername] = useState('');
+  const [error, setError] = useState('');
 
-// CSS MEJORADO
+  const handleEmailAuth = async (e) => {
+    e.preventDefault();
+    setError('');
+    try {
+      if (isLoginView) {
+        await signInWithEmailAndPassword(auth, email, password);
+      } else {
+        if (!username.trim()) {
+          setError("REQ_ERROR: Se requiere un Nombre de Operador.");
+          return;
+        }
+        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        await updateProfile(userCredential.user, {
+          displayName: username,
+          photoURL: `https://api.dicebear.com/7.x/identicon/svg?seed=${email}`
+        });
+        window.location.reload(); // Recargar para aplicar perfil generado
+      }
+    } catch (err) {
+      console.error(err);
+      setError("ACCESO DENEGADO: Credenciales inválidas o cuenta existente.");
+    }
+  };
+
+  return (
+    <div className="login-screen">
+      <div className="login-card">
+        <h1 className="login-logo">ARCANUM</h1>
+        <p className="login-sub">SYNAPT_NETWORK_GATEWAY</p>
+        
+        <form onSubmit={handleEmailAuth} className="email-auth-form">
+          {!isLoginView && (
+            <input 
+              type="text" 
+              placeholder="Nombre Operador (Ej. OP_01)" 
+              className="auth-input"
+              value={username}
+              onChange={e => setUsername(e.target.value)}
+              required={!isLoginView}
+            />
+          )}
+          <input 
+            type="email" 
+            placeholder="Correo Encriptado" 
+            className="auth-input"
+            value={email}
+            onChange={e => setEmail(e.target.value)}
+            required
+          />
+          <input 
+            type="password" 
+            placeholder="Código de Acceso" 
+            className="auth-input"
+            value={password}
+            onChange={e => setPassword(e.target.value)}
+            required
+          />
+          {error && <div className="auth-error">{error}</div>}
+          
+          <button type="submit" className="btn-auth-submit">
+            {isLoginView ? 'INICIAR SESIÓN DE RED' : 'REGISTRAR OPERADOR'}
+          </button>
+        </form>
+
+        <div className="auth-divider"><span>O</span></div>
+
+        <button className="btn-login-google" onClick={() => signInWithPopup(auth, googleProvider)}>
+          CONEXIÓN VÍA GOOGLE
+        </button>
+
+        <div className="auth-toggle">
+          <span onClick={() => setIsLoginView(!isLoginView)}>
+            {isLoginView 
+              ? '¿Nuevo en la red? Solicitar acceso' 
+              : '¿Ya tienes credenciales? Iniciar sesión'}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// --- ESTILOS CSS MAESTROS ---
 const ArcanumStyles = () => (
   <style>{`
     :root {
@@ -267,10 +345,27 @@ const ArcanumStyles = () => (
 
     .loading-screen, .login-screen { height: 100vh; display: flex; align-items: center; justify-content: center; }
 
-    .login-card { text-align: center; background: var(--panel-bg); padding: 60px; border: 1px solid var(--border-color); border-radius: 4px; box-shadow: 0 0 40px rgba(229,9,20,0.1); }
-    .login-logo { font-size: 50px; font-weight: 900; color: var(--accent-red); letter-spacing: 10px; margin-bottom: 10px; text-shadow: 0 0 15px rgba(229,9,20,0.4); }
-    .login-sub { color: var(--text-muted); letter-spacing: 4px; font-size: 11px; margin-bottom: 40px; }
-    .btn-login { background: var(--text-main); color: var(--bg-color); border: none; padding: 15px 40px; font-weight: 900; cursor: pointer; border-radius: 2px; }
+    .login-card { text-align: center; background: var(--panel-bg); padding: 50px 60px; border: 1px solid var(--border-color); border-radius: 4px; box-shadow: 0 0 40px rgba(229,9,20,0.1); width: 100%; max-width: 420px; }
+    .login-logo { font-size: 45px; font-weight: 900; color: var(--accent-red); letter-spacing: 10px; margin-bottom: 5px; text-shadow: 0 0 15px rgba(229,9,20,0.4); }
+    .login-sub { color: var(--text-muted); letter-spacing: 3px; font-size: 10px; margin-bottom: 35px; }
+
+    .email-auth-form { display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px; }
+    .auth-input { background: #000; border: 1px solid var(--border-color); color: #fff; padding: 14px; outline: none; border-radius: 2px; font-size: 13px; font-family: monospace; }
+    .auth-input:focus { border-color: var(--accent-red); }
+    .btn-auth-submit { background: var(--accent-red); color: #fff; border: none; padding: 15px; font-weight: 900; cursor: pointer; border-radius: 2px; letter-spacing: 1px; transition: 0.2s; font-size: 12px;}
+    .btn-auth-submit:hover { background: #B80710; }
+    
+    .auth-error { color: var(--accent-red); font-size: 11px; font-weight: bold; margin-bottom: 5px; text-align: left; }
+    
+    .auth-divider { display: flex; align-items: center; text-align: center; margin: 20px 0; color: var(--text-muted); font-size: 10px; font-weight: bold; }
+    .auth-divider::before, .auth-divider::after { content: ''; flex: 1; border-bottom: 1px solid var(--border-color); }
+    .auth-divider span { padding: 0 10px; }
+    
+    .btn-login-google { background: #fff; color: #000; border: none; padding: 15px; font-weight: 900; cursor: pointer; border-radius: 2px; width: 100%; transition: 0.2s; font-size: 12px;}
+    .btn-login-google:hover { background: #ccc; }
+    
+    .auth-toggle { margin-top: 25px; font-size: 11px; color: var(--text-muted); cursor: pointer; text-decoration: underline; }
+    .auth-toggle:hover { color: #fff; }
 
     .os-layout { height: 100vh; display: flex; flex-direction: column; }
     .top-nav { padding: 15px 30px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.8); backdrop-filter: blur(10px); }
@@ -280,7 +375,8 @@ const ArcanumStyles = () => (
     
     .nav-controls { display: flex; align-items: center; gap: 20px; }
     .secure-text { font-size: 10px; color: var(--text-muted); font-weight: bold; letter-spacing: 1px; }
-    .btn-outline { background: transparent; border: 1px solid var(--border-color); color: var(--text-muted); padding: 6px 12px; cursor: pointer; font-size: 10px; }
+    .btn-outline { background: transparent; border: 1px solid var(--border-color); color: var(--text-muted); padding: 6px 12px; cursor: pointer; font-size: 10px; transition: 0.2s;}
+    .btn-outline:hover { color: #fff; border-color: var(--accent-red); }
 
     .main-grid { display: grid; grid-template-columns: 300px 1fr 340px; gap: 20px; padding: 20px 30px; flex: 1; overflow: hidden; }
     .glass-panel { background: rgba(7,7,7,0.8); border: 1px solid var(--border-color); border-radius: 6px; display: flex; flex-direction: column; overflow: hidden; backdrop-filter: blur(10px); }
@@ -293,9 +389,8 @@ const ArcanumStyles = () => (
 
     .top8-container { flex: 1; display: flex; flex-direction: column; overflow-y: auto; }
     .top8-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; padding: 0 20px 20px 20px; }
-    .top8-card { display: flex; flex-direction: column; align-items: center; gap: 8px; cursor: pointer; }
+    .top8-card { display: flex; flex-direction: column; align-items: center; gap: 8px; }
     .top8-avatar { width: 50px; height: 50px; background-color: #111; background-size: cover; background-position: center; border: 1px solid #333; border-radius: 4px; transition: 0.2s; }
-    .top8-card:hover .top8-avatar { border-color: var(--accent-red); box-shadow: 0 0 10px rgba(229,9,20,0.3); }
     .top8-name { font-size: 9px; color: var(--text-muted); font-family: monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 
     .chat-wrapper { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
