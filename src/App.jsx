@@ -10,7 +10,8 @@ export default function App() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    return onAuthStateChanged(auth, (u) => { setUser(u); setLoading(false); });
+    const unsub = onAuthStateChanged(auth, (u) => { setUser(u); setLoading(false); });
+    return () => unsub();
   }, []);
 
   if (loading) return <div style={css.centered}>RESTABLECIENDO ARCANUM OS...</div>;
@@ -27,33 +28,58 @@ const Dashboard = ({ user }) => {
   const [notes, setNotes] = useState([]);
   const [newNote, setNewNote] = useState('');
   const [showEmoji, setShowEmoji] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
-  // Firma personalizada para SYNAPT (Se pega automáticamente al copiar)
+  // FIRMA PERSONALIZADA (SYNAPT NETWORK)
   const signature = `\n\n---\n📲 SYNAPT Network\nTelegram: @synapt_news\nWeb: synfm.online`;
 
-  // Carga tus prompts personales desde Firestore
+  // 1. CARGA DE NOTAS (Sincronizada con tus reglas de /users/{uid}/notes)
   useEffect(() => {
     if (!db || !user) return;
-    const q = query(collection(db, "users", user.uid, "notes"), orderBy("createdAt", "desc"));
-    return onSnapshot(q, (snap) => {
+    const notesRef = collection(db, "users", user.uid, "notes");
+    const q = query(notesRef, orderBy("createdAt", "desc"));
+    
+    const unsubscribe = onSnapshot(q, (snap) => {
       setNotes(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, (error) => {
+      console.error("Error en Snapshot:", error);
     });
+    
+    return () => unsubscribe();
   }, [user]);
 
+  // 2. FUNCIÓN DE GUARDADO COMPLETA
   const saveNote = async () => {
-    if (!newNote.trim()) return;
+    if (!newNote.trim() || isSaving) return;
+    setIsSaving(true);
+    
     try {
-      await addDoc(collection(db, "users", user.uid, "notes"), {
+      const userNotesRef = collection(db, "users", user.uid, "notes");
+      await addDoc(userNotesRef, {
         content: newNote,
-        createdAt: serverTimestamp()
+        createdAt: serverTimestamp(),
+        author: user.displayName
       });
       setNewNote('');
-    } catch (e) { console.error("Error al guardar:", e); }
+    } catch (e) {
+      console.error("Error al guardar en Firestore:", e);
+      alert("Error de permisos: Asegúrate de que en la consola de Firebase la colección 'users' permita escritura para tu UID.");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const copyWithSignature = () => {
     navigator.clipboard.writeText(text + signature);
     alert("Copiado con firma SYNAPT");
+  };
+
+  const deleteItem = async (noteId) => {
+    try {
+      await deleteDoc(doc(db, "users", user.uid, "notes", noteId));
+    } catch (e) {
+      console.error("Error al eliminar:", e);
+    }
   };
 
   return (
@@ -70,10 +96,10 @@ const Dashboard = ({ user }) => {
       </nav>
 
       <main style={css.grid}>
-        {/* LADO IZQUIERDO: ESTACIÓN DE TRABAJO (EDITOR) */}
+        {/* LADO IZQUIERDO: ESTACIÓN EDITORIAL */}
         <section style={css.card}>
           <div style={css.cardHeader}>
-            <h3 style={css.redTitle}>ESTACIÓN EDITORIAL 9:16</h3>
+            <h3 style={css.redTitle}>GENERADOR EDITORIAL 9:16</h3>
             <button style={css.btnSmall} onClick={() => setText('')}>VACIAR</button>
           </div>
           <textarea 
@@ -89,26 +115,39 @@ const Dashboard = ({ user }) => {
           {showEmoji && <div style={{marginTop:'15px'}}><EmojiPicker theme="dark" width="100%" onEmojiClick={(e)=>setText(text + e.emoji)} /></div>}
         </section>
 
-        {/* LADO DERECHO: BASE DE DATOS DE PROMPTS */}
+        {/* LADO DERECHO: DATABASE DE PROMPTS */}
         <aside style={css.card}>
-          <h3 style={css.whiteTitle}>PROMPTS & CONFIGURACIÓN</h3>
+          <div style={css.cardHeader}>
+            <h3 style={css.whiteTitle}>PROMPTS & CLOUD DATA</h3>
+            {isSaving && <span style={{fontSize:'9px', color:'#E50914'}}>GUARDANDO...</span>}
+          </div>
           <div style={{display:'flex', gap:'8px', marginBottom:'20px'}}>
             <input 
               style={css.input} 
-              placeholder="Guardar instrucción de IA..." 
+              placeholder="Nueva instrucción maestra..." 
               value={newNote}
               onChange={(e) => setNewNote(e.target.value)}
               onKeyPress={(e) => e.key === 'Enter' && saveNote()}
             />
-            <button style={css.btnRed} onClick={saveNote}>+</button>
+            <button 
+              style={{...css.btnRed, opacity: isSaving ? 0.5 : 1}} 
+              onClick={saveNote}
+              disabled={isSaving}
+            >
+              +
+            </button>
           </div>
           <div style={css.scrollArea}>
-            {notes.map(n => (
-              <div key={n.id} style={css.noteCard}>
-                <p style={{fontSize:'13px', whiteSpace:'pre-wrap'}}>{n.content}</p>
-                <button onClick={() => deleteDoc(doc(db, "users", user.uid, "notes", n.id))} style={css.delBtn}>BORRAR</button>
-              </div>
-            ))}
+            {notes.length === 0 ? (
+              <p style={{fontSize:'11px', color:'#333'}}>No hay prompts guardados en tu nube.</p>
+            ) : (
+              notes.map(n => (
+                <div key={n.id} style={css.noteCard}>
+                  <p style={{fontSize:'13px', whiteSpace:'pre-wrap'}}>{n.content}</p>
+                  <button onClick={() => deleteItem(n.id)} style={css.delBtn}>BORRAR</button>
+                </div>
+              ))
+            )}
           </div>
         </aside>
       </main>
@@ -129,7 +168,7 @@ const Login = () => (
 const css = {
   container: { minHeight: '100vh', backgroundColor: '#000', color: '#fff', fontFamily: 'Inter, sans-serif' },
   centered: { height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#000' },
-  nav: { display: 'flex', justifyContent: 'space-between', padding: '15px 4%', borderBottom: '1px solid #111' },
+  nav: { display: 'flex', justifyContent: 'space-between', padding: '15px 4%', borderBottom: '1px solid #111', background: '#000', position: 'sticky', top: 0, zIndex: 10 },
   logo: { color: '#E50914', fontSize: '24px', fontWeight: '900', letterSpacing: '2px' },
   bigLogo: { color: '#E50914', fontSize: '50px', fontWeight: '900', letterSpacing: '8px' },
   grid: { display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '25px', padding: '30px 4%' },
@@ -146,7 +185,7 @@ const css = {
   noteCard: { background: '#050505', borderLeft: '3px solid #E50914', padding: '15px', marginBottom: '10px', borderTop: '1px solid #111' },
   delBtn: { background: 'none', border: 'none', color: '#E50914', fontSize: '10px', cursor: 'pointer', marginTop: '10px' },
   redTitle: { color: '#E50914', fontSize: '12px', fontWeight: 'bold' },
-  whiteTitle: { color: '#fff', fontSize: '12px', fontWeight: 'bold', marginBottom: '20px' },
+  whiteTitle: { color: '#fff', fontSize: '12px', fontWeight: 'bold' },
   flexGap: { display: 'flex', gap: '10px' },
   footer: { textAlign: 'center', padding: '60px', color: '#111', fontSize: '10px' },
   loginBox: { textAlign: 'center' }
