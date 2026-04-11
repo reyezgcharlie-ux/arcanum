@@ -60,10 +60,9 @@ const SynaptNetwork = ({ user }) => {
   const [adminMovieUrl, setAdminMovieUrl] = useState('');
   const [localHideMovie, setLocalHideMovie] = useState(false);
 
-  // CONTROL MAESTRO: Solo tú tienes acceso a las funciones de ElFilme
+  // CONTROL MAESTRO
   const isAdmin = user.email === 'reyezgcharlie@gmail.com';
 
-  // CARGA DE RADIO 100% EN ESPAÑOL
   useEffect(() => {
     fetch('https://de1.api.radio-browser.info/json/stations/search?language=spanish&limit=200&order=clickcount&reverse=true&hidebroken=true')
       .then(res => res.json())
@@ -143,7 +142,7 @@ const SynaptNetwork = ({ user }) => {
       <nav className="top-nav">
         <div className="brand-group">
           <h1 className="brand-logo">ARCANUM</h1>
-          <span className="badge">ADMIN_OS</span>
+          <span className="badge desktop-only">ADMIN_OS</span>
         </div>
         <div className="nav-controls">
           <button className="btn-outline" onClick={() => signOut(auth)}>SALIR</button>
@@ -152,7 +151,8 @@ const SynaptNetwork = ({ user }) => {
 
       <div className="main-container">
         
-        <aside className={`glass-panel side-panel ${activeTab === 'RADAR' ? 'mobile-active' : 'mobile-hidden'}`}>
+        {/* === PANEL IZQUIERDO: RADAR === */}
+        <aside className={`glass-panel profile-panel ${activeTab === 'RADAR' ? 'active' : ''}`}>
           <div className="panel-header">OPERADOR: {user.displayName}</div>
           <div className="profile-info">
             <img src={user.photoURL || `https://api.dicebear.com/7.x/identicon/svg?seed=${user.email}`} alt="avatar" className="main-avatar" />
@@ -175,7 +175,8 @@ const SynaptNetwork = ({ user }) => {
           </div>
         </aside>
 
-        <main className={`glass-panel chat-panel ${activeTab === 'CHAT' ? 'mobile-active' : 'mobile-hidden'}`}>
+        {/* === PANEL CENTRAL: CHAT Y CINE === */}
+        <main className={`glass-panel chat-panel ${activeTab === 'CHAT' ? 'active' : ''}`}>
           <div className="center-header">
             {activeView === 'GLOBAL' ? <span>FEED GLOBAL SYNAPT</span> : <span style={{color:'#E50914'}}>DM: {privateTarget?.name}</span>}
             {activeView === 'PRIVATE' && <button className="btn-micro" onClick={() => setActiveView('GLOBAL')}>VOLVER</button>}
@@ -222,7 +223,8 @@ const SynaptNetwork = ({ user }) => {
           </div>
         </main>
 
-        <aside className={`glass-panel side-panel ${activeTab === 'RADIO' ? 'mobile-active' : 'mobile-hidden'}`}>
+        {/* === PANEL DERECHO: RADIO === */}
+        <aside className={`glass-panel media-panel ${activeTab === 'RADIO' ? 'active' : ''}`}>
           <div className="panel-header">SYNFM.ONLINE</div>
           <div className="player-card">
             <h3 className="station-name">{currentStation.name}</h3>
@@ -254,12 +256,9 @@ const SynaptNetwork = ({ user }) => {
   );
 };
 
-// --- CHAT ROOM (CON SCROLL SEGURO Y LOCAL) ---
 const ChatRoom = ({ user, messages: globalMessages, targetUser, isPrivate }) => {
   const [input, setInput] = useState('');
   const [privateMessages, setPrivateMessages] = useState([]);
-  
-  // Referencia para controlar el scroll interno sin mover la página entera
   const chatFeedRef = useRef(null); 
   
   const chatId = isPrivate ? [user.uid, targetUser.uid].sort().join('_') : 'public_feed';
@@ -273,7 +272,7 @@ const ChatRoom = ({ user, messages: globalMessages, targetUser, isPrivate }) => 
 
   const displayMessages = isPrivate ? privateMessages : globalMessages;
 
-  // Lógica de auto-scroll matemática y segura
+  // Parche para scroll fluido sin saltar pantalla entera
   useEffect(() => { 
     if (chatFeedRef.current) {
       chatFeedRef.current.scrollTop = chatFeedRef.current.scrollHeight;
@@ -365,9 +364,11 @@ const ArcanumStyles = () => (
   <style>{`
     :root { --bg-color: #000; --panel-bg: #070707; --border-color: #1a1a1a; --accent-red: #E50914; --text-main: #fff; --text-muted: #666; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
+    
+    /* Previene el salto del teclado en movil usando 100dvh (Dynamic Viewport Height) */
     body { background-color: var(--bg-color); color: var(--text-main); font-family: 'Inter', sans-serif; overflow: hidden; }
 
-    .loading-screen, .login-screen { height: 100vh; display: flex; align-items: center; justify-content: center; background: radial-gradient(circle at top, #110000 0%, #000 60%); }
+    .loading-screen, .login-screen { height: 100dvh; display: flex; align-items: center; justify-content: center; background: radial-gradient(circle at top, #110000 0%, #000 60%); }
     .login-card { text-align: center; background: var(--panel-bg); padding: 40px; border: 1px solid var(--border-color); width: 100%; max-width: 380px; }
     .login-logo { font-size: 32px; font-weight: 900; color: var(--accent-red); letter-spacing: 5px; margin-bottom: 30px; }
     .email-auth-form { display: flex; flex-direction: column; gap: 10px; }
@@ -378,74 +379,100 @@ const ArcanumStyles = () => (
     .auth-divider::before, .auth-divider::after { content: ''; flex: 1; border-bottom: 1px solid var(--border-color); }
     .auth-toggle { margin-top: 15px; font-size: 11px; color: var(--text-muted); cursor: pointer; text-decoration: underline; }
 
-    .os-layout { height: 100vh; display: flex; flex-direction: column; }
-    .top-nav { padding: 10px 20px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; background: #000; }
+    /* LAYOUT BASE */
+    .os-layout { height: 100dvh; display: flex; flex-direction: column; }
+    .top-nav { padding: 10px 20px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; background: #000; flex: none; }
     .brand-logo { color: var(--accent-red); font-size: 18px; font-weight: 900; letter-spacing: 2px; }
     .badge { background: var(--accent-red); color: #fff; font-size: 8px; padding: 2px 5px; border-radius: 2px; margin-left: 10px; }
     .btn-outline { background: transparent; border: 1px solid var(--border-color); color: var(--text-muted); padding: 5px 10px; font-size: 10px; cursor: pointer; }
+    .desktop-only { display: none; }
 
-    .main-container { flex: 1; display: flex; flex-direction: column; overflow: hidden; position: relative; }
-    .glass-panel { background: var(--panel-bg); display: flex; flex-direction: column; flex: 1; }
-    .mobile-hidden { display: none !important; }
-    .mobile-active { display: flex !important; }
-    .panel-header { font-size: 9px; font-weight: bold; color: var(--text-muted); padding: 15px; border-bottom: 1px solid var(--border-color); text-transform: uppercase; letter-spacing: 1px; }
+    /* CONTENEDOR FLEXIBLE */
+    .main-container { flex: 1; display: flex; flex-direction: column; overflow: hidden; position: relative; min-height: 0; }
+    
+    /* LOGICA DE PANELES (MÓVIL) */
+    .glass-panel { background: var(--panel-bg); display: none; flex-direction: column; flex: 1; overflow: hidden; }
+    .glass-panel.active { display: flex; width: 100%; height: 100%; }
+    
+    .panel-header { font-size: 9px; font-weight: bold; color: var(--text-muted); padding: 15px; border-bottom: 1px solid var(--border-color); text-transform: uppercase; flex: none; }
 
-    .admin-cinema-bar { display: flex; background: #110000; border-bottom: 1px solid var(--accent-red); padding: 8px; gap: 5px; }
+    /* CINE & ADMIN */
+    .admin-cinema-bar { display: flex; background: #110000; border-bottom: 1px solid var(--accent-red); padding: 8px; gap: 5px; flex: none; }
     .cinema-input { flex: 1; background: #000; border: 1px solid var(--accent-red); color: #fff; padding: 8px; font-size: 11px; outline: none; }
     .btn-cinema-launch { background: var(--accent-red); color: #fff; border: none; padding: 0 10px; font-weight: bold; font-size: 10px; cursor: pointer; }
     .btn-cinema-stop { background: #000; color: var(--accent-red); border: 1px solid var(--accent-red); padding: 0 10px; font-size: 10px; cursor: pointer; }
-
-    .cinema-viewport { display: flex; flex-direction: column; background: #000; }
+    .cinema-viewport { display: flex; flex-direction: column; background: #000; flex: none; }
     .cinema-header { display: flex; justify-content: space-between; padding: 5px 15px; align-items: center; background: #0a0a0a; border-bottom: 1px solid #222; }
     .player-wrapper { position: relative; width: 100%; padding-top: 56.25%; }
     .video-element { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
-    .cinema-hidden-notice { padding: 10px; text-align: center; background: #111; font-size: 10px; color: var(--text-muted); display: flex; justify-content: center; gap: 10px; align-items: center; }
+    .cinema-hidden-notice { padding: 10px; text-align: center; background: #111; font-size: 10px; color: var(--text-muted); display: flex; justify-content: center; gap: 10px; align-items: center; flex: none; }
     .btn-micro { background: transparent; border: 1px solid #333; color: #aaa; font-size: 9px; padding: 4px 8px; cursor: pointer; border-radius: 2px; }
 
+    /* CHAT CORE */
     .dynamic-area { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
-
+    .center-header { font-size: 10px; font-weight: bold; color: var(--text-muted); padding: 10px 15px; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between; background: #050505; flex: none; }
     .chat-wrapper { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
     .chat-feed { flex: 1; padding: 15px; overflow-y: auto; }
     .message-row { display: flex; flex-direction: column; margin-bottom: 15px; }
     .message-row.me { align-items: flex-end; }
     .msg-author { font-size: 8px; color: var(--text-muted); margin-bottom: 3px; font-weight: bold; }
-    .msg-bubble { padding: 10px 14px; font-size: 14px; line-height: 1.4; max-width: 85%; }
+    .msg-bubble { padding: 10px 14px; font-size: 14px; line-height: 1.4; max-width: 85%; word-wrap: break-word; }
     .me .msg-bubble { background: var(--accent-red); color: #fff; border-radius: 10px 10px 0 10px; }
     .them .msg-bubble { background: #111; border: 1px solid var(--border-color); border-radius: 0 10px 10px 10px; }
     .chat-image { max-width: 100%; border-radius: 4px; margin-top: 5px; }
-
-    .chat-input-area { display: flex; background: #000; border-top: 1px solid var(--border-color); padding: 10px; gap: 5px; }
+    .chat-input-area { display: flex; background: #000; border-top: 1px solid var(--border-color); padding: 10px; gap: 5px; flex: none; }
     .chat-input { flex: 1; background: #050505; border: 1px solid #222; color: #fff; padding: 10px; outline: none; }
     .btn-send { background: var(--accent-red); color: #fff; border: none; padding: 0 15px; cursor: pointer; }
 
-    .mobile-nav { display: flex; background: #000; border-top: 1px solid #222; height: 55px; }
+    /* PESTAÑAS MÓVILES */
+    .mobile-nav { display: flex; background: #000; border-top: 1px solid #222; height: 55px; flex: none; }
     .nav-tab { flex: 1; background: transparent; border: none; color: #444; font-size: 10px; font-weight: bold; cursor: pointer; }
     .active-tab { color: var(--accent-red); border-top: 2px solid var(--accent-red); background: #050505; }
 
+    /* RADAR */
+    .profile-info { display: flex; flex-direction: column; align-items: center; padding: 15px; border-bottom: 1px solid var(--border-color); flex: none; }
+    .main-avatar { width: 70px; height: 70px; border-radius: 50%; border: 2px solid var(--accent-red); padding: 2px; margin-bottom: 10px; object-fit: cover;}
+    .user-name { font-size: 14px; font-weight: bold; margin-bottom: 5px; }
+    .status-pill { border: 1px solid #0f0; color: #0f0; background: rgba(0,255,0,0.05); font-size: 9px; padding: 2px 10px; border-radius: 20px; }
+    .top8-container { flex: 1; display: flex; flex-direction: column; overflow-y: auto; }
     .top8-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; padding: 15px; }
     .top8-card { display: flex; flex-direction: column; align-items: center; gap: 5px; cursor: pointer; }
     .top8-avatar { width: 42px; height: 42px; background-size: cover; border-radius: 50%; border: 1px solid #222; position: relative; }
     .online-dot-mini { position: absolute; bottom: 0; right: 0; width: 8px; height: 8px; background: #0f0; border-radius: 50%; border: 1.5px solid #000; }
     .top8-name { font-size: 8px; color: var(--text-muted); }
 
-    .player-card { background: #000; border: 1px solid var(--border-color); margin: 15px; padding: 15px; }
+    /* RADIO */
+    .player-card { background: #000; border: 1px solid var(--border-color); margin: 15px; padding: 15px; flex: none; }
     .station-name { font-size: 13px; font-weight: bold; margin-bottom: 10px; }
     .audio-player { width: 100%; height: 30px; }
     .directory-list { flex: 1; overflow-y: auto; padding: 0 15px; display: flex; flex-direction: column; gap: 5px; }
-    .station-item { display: flex; align-items: center; gap: 10px; padding: 8px; background: #050505; border-radius: 3px; cursor: pointer; }
+    .station-item { display: flex; align-items: center; gap: 10px; padding: 8px; background: #050505; border-radius: 3px; cursor: pointer; flex: none; }
     .active-station { border-left: 2px solid var(--accent-red); }
     .station-title { font-size: 10px; font-weight: bold; }
+    .search-input { width: 100%; background: #000; border: 1px solid #222; padding: 10px; color: #fff; border-radius: 4px; font-size: 11px; outline: none; }
 
     .custom-scroll::-webkit-scrollbar { width: 4px; height: 4px; }
     .custom-scroll::-webkit-scrollbar-track { background: transparent; }
     .custom-scroll::-webkit-scrollbar-thumb { background: #333; border-radius: 10px; }
     .custom-scroll::-webkit-scrollbar-thumb:hover { background: var(--accent-red); }
 
-    @media (min-width: 900px) {
+    /* === RESPONSIVE DESKTOP === */
+    @media (min-width: 1024px) {
       .mobile-nav { display: none; }
-      .main-container { display: grid; grid-template-columns: 260px 1fr 300px; gap: 15px; padding: 15px; }
-      .mobile-hidden { display: flex !important; }
-      .glass-panel { border-radius: 5px; border: 1px solid var(--border-color); }
+      .desktop-only { display: inline-block; }
+      
+      /* Forzar que Desktop se comporte como fila en vez de columna */
+      .main-container { flex-direction: row; gap: 20px; padding: 20px; background: transparent; }
+      
+      /* Ignorar el display: none de las pestañas en Desktop */
+      .glass-panel { display: flex !important; height: 100%; border-radius: 6px; border: 1px solid var(--border-color); }
+      
+      /* Tamaños fijos para los lados, expandir el centro */
+      .profile-panel { width: 280px; flex: none; }
+      .chat-panel { flex: 1; min-width: 0; } 
+      .media-panel { width: 320px; flex: none; }
+
+      .top8-grid { grid-template-columns: repeat(3, 1fr); }
     }
   `}</style>
 );
