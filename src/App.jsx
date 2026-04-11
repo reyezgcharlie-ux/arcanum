@@ -12,120 +12,118 @@ export default function App() {
     return onAuthStateChanged(auth, (u) => { setUser(u); setLoading(false); });
   }, []);
 
-  if (loading) return <div style={css.centered}><div style={css.loader}></div></div>;
+  if (loading) return <div className="loading-screen">CONECTANDO A SYNAPT NETWORK...</div>;
 
   return (
-    <Routes>
-      <Route path="/" element={user ? <SynaptNetwork user={user} /> : <Login />} />
-    </Routes>
+    <>
+      <ArcanumStyles />
+      <Routes>
+        <Route path="/" element={user ? <SynaptNetwork user={user} /> : <Login />} />
+      </Routes>
+    </>
   );
 }
 
 const SynaptNetwork = ({ user }) => {
-  // Estado para el reproductor de SYNFM
-  const [currentStation, setCurrentStation] = useState({
-    name: "SYNAPT Radio Live",
-    genre: "Electronic / Hub",
-    url: "https://stream.synfm.online/live"
-  });
+  const [stations, setStations] = useState([
+    { id: 'synapt-main', name: "SYNAPT Radio", genre: "MAIN HUB", url: "https://stream.synfm.online/live" }
+  ]);
+  const [currentStation, setCurrentStation] = useState(stations[0]);
 
-  // Directorio de prueba (Simulando la base de datos de synfm.online)
-  const synfmDirectory = [
-    { id: 1, name: "SYNAPT Radio Live", genre: "Electronic", url: "https://stream.synfm.online/live" },
-    { id: 2, name: "Neon Synthwave", genre: "Retrowave", url: "https://icecast.omroep.nl/3fm-bb-mp3" }, // URLs de demo
-    { id: 3, name: "Lofi Nights", genre: "Chill/Study", url: "https://play.streamafrica.net/lofi" },
-    { id: 4, name: "Underground Techno", genre: "Dark", url: "https://live.hunter.fm/80s_high" },
-    { id: 5, name: "Indie Rock Hits", genre: "Rock", url: "https://stream.synfm.online/live" }
-  ];
+  // Cargar estaciones REALES de todo el mundo mediante API
+  useEffect(() => {
+    fetch('https://de1.api.radio-browser.info/json/stations/search?limit=40&order=clickcount&reverse=true&hidebroken=true')
+      .then(res => res.json())
+      .then(data => {
+        const liveStations = data.filter(s => s.url_resolved).map(s => ({
+          id: s.stationuuid,
+          name: s.name.substring(0, 22).trim(),
+          genre: (s.tags.split(',')[0] || "GLOBAL").toUpperCase(),
+          url: s.url_resolved
+        }));
+        // Mantiene SYNAPT en el top y añade las reales
+        setStations(prev => [prev[0], ...liveStations]);
+      })
+      .catch(err => console.error("Error cargando directorio de radio:", err));
+  }, []);
 
   return (
-    <div style={css.layout}>
-      {/* HEADER DE SISTEMA */}
-      <nav style={css.nav}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-          <h1 style={css.logo}>ARCANUM</h1>
-          <span style={css.badgeRed}>BETA_NETWORK</span>
+    <div className="os-layout">
+      {/* NAVBAR */}
+      <nav className="top-nav">
+        <div className="brand-group">
+          <h1 className="brand-logo">ARCANUM</h1>
+          <span className="badge">LIVE_NETWORK</span>
         </div>
-        <div style={css.navRight}>
-          <div style={css.audioVisualizer}>
-            <span style={css.bar}></span><span style={css.bar}></span><span style={css.bar}></span>
+        <div className="nav-controls">
+          <div className="visualizer">
+            <div className="bar"></div><div className="bar"></div><div className="bar"></div>
           </div>
-          <span style={{ fontSize: '11px', color: '#E50914', fontWeight: 'bold' }}>AEC-256 SECURE</span>
-          <button onClick={() => signOut(auth)} style={css.btnOut}>LOGOUT</button>
+          <span className="secure-text">AEC-256 SECURE</span>
+          <button className="btn-outline" onClick={() => signOut(auth)}>DESCONECTAR</button>
         </div>
       </nav>
 
-      <div style={css.mainGrid}>
-        
-        {/* PANEL IZQUIERDO: RETRO PROFILE */}
-        <aside style={css.glassPanel}>
-          <div style={css.panelHeader}>IDENTIDAD // REDWOOD CITY</div>
-          <div style={css.profileContainer}>
-            <div style={css.avatarGlow}>
-              <img src={user.photoURL} alt="avatar" style={css.bigAvatar} />
-            </div>
-            <h2 style={css.userName}>{user.displayName}</h2>
-            <div style={css.statusPill}>● ONLINE EN ARCANUM</div>
+      <div className="main-grid">
+        {/* IZQUIERDA: PERFIL Y TOP 8 */}
+        <aside className="glass-panel profile-panel">
+          <div className="panel-header">IDENTIDAD OPERATIVA</div>
+          
+          <div className="profile-info">
+            <img src={user.photoURL} alt="avatar" className="main-avatar" />
+            <h2 className="user-name">{user.displayName}</h2>
+            <div className="status-pill">● ONLINE</div>
           </div>
           
-          <div style={css.top8Section}>
-            <div style={css.sectionTitle}>MI TOP 8 OPERADORES</div>
-            <div style={css.top8Grid}>
+          <div className="top8-container">
+            <div className="panel-header">TOP 8 OPERADORES</div>
+            <div className="top8-grid">
               {[1,2,3,4,5,6,7,8].map(i => (
-                <div key={i} style={css.friendBox}>
-                  <div style={css.friendAvatar}></div>
-                  <span style={css.friendName}>OP_{i}</span>
+                <div key={i} className="top8-card">
+                  <div className="top8-avatar"></div>
+                  <span className="top8-name">OP_0{i}</span>
                 </div>
               ))}
             </div>
           </div>
         </aside>
 
-        {/* PANEL CENTRAL: ENCRYPTED FEED */}
-        <main style={{ ...css.glassPanel, padding: 0, display: 'flex', flexDirection: 'column' }}>
-          <div style={{ ...css.panelHeader, padding: '20px', borderBottom: '1px solid #222', background: 'rgba(229, 9, 20, 0.05)' }}>
-            <span style={{ color: '#fff' }}>SALA GLOBAL ENCRIPTADA</span>
+        {/* CENTRO: FEED MULTIJUGADOR REAL */}
+        <main className="glass-panel chat-panel">
+          <div className="panel-header" style={{ borderBottom: '1px solid #1a1a1a', paddingBottom: '15px' }}>
+            FEED GLOBAL PÚBLICO
           </div>
           <ChatRoom user={user} />
         </main>
 
-        {/* PANEL DERECHO: SYNFM DIRECTORY */}
-        <aside style={css.glassPanel}>
-          <div style={css.panelHeader}>SYNFM.ONLINE // MEDIA_HUB</div>
+        {/* DERECHA: DIRECTORIO SYNFM REAL */}
+        <aside className="glass-panel media-panel">
+          <div className="panel-header">SYNFM.ONLINE // LIVE DIRECTORY</div>
           
-          {/* NOW PLAYING CARD */}
-          <div style={css.nowPlayingCard}>
-            <div style={css.nowPlayingHeader}>
-              <div style={css.liveIndicator}></div>
-              <span style={{ fontSize: '10px', color: '#E50914', fontWeight: '900' }}>NOW PLAYING</span>
+          <div className="player-card">
+            <div className="now-playing-badge">
+              <div className="live-dot"></div>
+              <span>TRANSMITIENDO</span>
             </div>
-            <h3 style={css.stationTitle}>{currentStation.name}</h3>
-            <p style={css.stationGenre}>{currentStation.genre}</p>
-            <audio controls autoPlay style={css.audioPlayer} src={currentStation.url} />
+            <h3 className="station-name">{currentStation.name}</h3>
+            <p className="station-genre">{currentStation.genre}</p>
+            <audio controls autoPlay className="audio-player" src={currentStation.url} />
           </div>
 
-          {/* DIRECTORIO DE ESTACIONES */}
-          <div style={css.directorySection}>
-            <div style={css.sectionTitle}>EXPLORAR ESTACIONES (18K+ LIVE)</div>
-            <div style={css.directoryList}>
-              {synfmDirectory.map(station => (
-                <div 
-                  key={station.id} 
-                  style={{
-                    ...css.stationItem, 
-                    borderLeft: currentStation.name === station.name ? '3px solid #E50914' : '3px solid transparent',
-                    background: currentStation.name === station.name ? 'rgba(229, 9, 20, 0.1)' : '#0a0a0a'
-                  }}
-                  onClick={() => setCurrentStation(station)}
-                >
-                  <div style={css.playIcon}>{currentStation.name === station.name ? '❚❚' : '▶'}</div>
-                  <div>
-                    <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#fff' }}>{station.name}</div>
-                    <div style={{ fontSize: '9px', color: '#666' }}>{station.genre}</div>
-                  </div>
+          <div className="directory-list custom-scroll">
+            {stations.map((station, index) => (
+              <div 
+                key={station.id + index} 
+                className={`station-item ${currentStation.url === station.url ? 'active-station' : ''}`}
+                onClick={() => setCurrentStation(station)}
+              >
+                <div className="play-btn">{currentStation.url === station.url ? '||' : '▶'}</div>
+                <div className="station-info">
+                  <div className="station-title">{station.name || "Unknown Station"}</div>
+                  <div className="station-sub">{station.genre}</div>
                 </div>
-              ))}
-            </div>
+              </div>
+            ))}
           </div>
         </aside>
       </div>
@@ -133,15 +131,16 @@ const SynaptNetwork = ({ user }) => {
   );
 };
 
-// --- CHAT MODULE ---
+// --- CHAT EN TIEMPO REAL MULTIJUGADOR ---
 const ChatRoom = ({ user }) => {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const dummy = useRef();
 
+  // Conectado a 'public_feed' para evitar bloqueos de participantes
   useEffect(() => {
     if (!db) return;
-    const q = query(collection(db, "arcanum_comms"), orderBy("createdAt", "asc"), limit(50));
+    const q = query(collection(db, "public_feed"), orderBy("createdAt", "asc"), limit(50));
     const unsub = onSnapshot(q, (snap) => {
       setMessages(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       dummy.current?.scrollIntoView({ behavior: 'smooth' });
@@ -152,109 +151,166 @@ const ChatRoom = ({ user }) => {
   const sendMsg = async (e) => {
     e.preventDefault();
     if (!input.trim()) return;
-    await addDoc(collection(db, "arcanum_comms"), {
-      text: input,
-      uid: user.uid,
-      name: user.displayName,
-      createdAt: serverTimestamp()
-    });
-    setInput('');
+    try {
+      await addDoc(collection(db, "public_feed"), {
+        text: input,
+        uid: user.uid,
+        name: user.displayName,
+        createdAt: serverTimestamp()
+      });
+      setInput('');
+    } catch (error) {
+      alert("Error: Asegúrate de haber añadido la regla de public_feed en Firestore.");
+      console.error(error);
+    }
   };
 
   return (
-    <>
-      <div style={css.chatScroll}>
+    <div className="chat-wrapper">
+      <div className="chat-feed custom-scroll">
+        {messages.length === 0 && <div style={{textAlign:'center', color:'#444', fontSize:'11px'}}>Sin transmisiones...</div>}
         {messages.map(m => (
-          <div key={m.id} style={{ marginBottom: '20px', display: 'flex', flexDirection: 'column', alignItems: m.uid === user.uid ? 'flex-end' : 'flex-start' }}>
-            <div style={css.msgAuthor}>{m.name}</div>
-            <div style={m.uid === user.uid ? css.bubbleMe : css.bubbleThem}>
-              {m.text}
-            </div>
+          <div key={m.id} className={`message-row ${m.uid === user.uid ? 'me' : 'them'}`}>
+            <div className="msg-author">{m.name}</div>
+            <div className="msg-bubble">{m.text}</div>
           </div>
         ))}
         <div ref={dummy}></div>
       </div>
-      <form onSubmit={sendMsg} style={css.chatForm}>
+      <form onSubmit={sendMsg} className="chat-input-area">
         <input 
-          style={css.chatInput} 
-          placeholder="Transmite un mensaje..." 
+          className="chat-input" 
+          placeholder="Transmite al feed global..." 
           value={input} 
           onChange={(e) => setInput(e.target.value)} 
         />
-        <button style={css.btnSend} type="submit">ENVIAR</button>
+        <button className="btn-send" type="submit">ENVIAR</button>
       </form>
-    </>
+    </div>
   );
 };
 
-// --- LOGIN MODULE ---
 const Login = () => (
-  <div style={css.centered}>
-    <div style={css.loginBox}>
-      <h1 style={css.loginLogo}>ARCANUM</h1>
-      <p style={css.loginSubtitle}>SOCIAL NETWORK & MEDIA HUB</p>
-      <button style={css.btnLogin} onClick={() => signInWithPopup(auth, googleProvider)}>
-        INICIAR CONEXIÓN
+  <div className="login-screen">
+    <div className="login-card">
+      <h1 className="login-logo">ARCANUM</h1>
+      <p className="login-sub">SYNAPT_NETWORK_GATEWAY</p>
+      <button className="btn-login" onClick={() => signInWithPopup(auth, googleProvider)}>
+        INICIAR SESIÓN DE RED
       </button>
     </div>
   </div>
 );
 
-// --- CSS IN JS (NETFLIX-CORE STYLE) ---
-const css = {
-  layout: { minHeight: '100vh', backgroundColor: '#000', color: '#fff', fontFamily: "'Inter', sans-serif", display: 'flex', flexDirection: 'column', backgroundImage: 'radial-gradient(circle at 50% 0%, #1a0000 0%, #000 50%)' },
-  centered: { height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#000' },
-  nav: { padding: '20px 40px', borderBottom: '1px solid #111', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(10px)' },
-  logo: { color: '#E50914', fontSize: '24px', fontWeight: '900', letterSpacing: '4px', margin: 0, textShadow: '0 0 15px rgba(229,9,20,0.4)' },
-  badgeRed: { background: '#E50914', color: '#fff', fontSize: '9px', padding: '3px 6px', borderRadius: '2px', fontWeight: 'bold' },
-  navRight: { display: 'flex', gap: '20px', alignItems: 'center' },
-  mainGrid: { display: 'grid', gridTemplateColumns: '300px 1fr 350px', gap: '25px', padding: '30px 40px', flex: 1, overflow: 'hidden' },
-  glassPanel: { background: '#050505', border: '1px solid #1a1a1a', borderRadius: '8px', padding: '25px', display: 'flex', flexDirection: 'column', boxShadow: '0 10px 30px rgba(0,0,0,0.5)' },
-  panelHeader: { fontSize: '10px', color: '#666', letterSpacing: '2px', marginBottom: '20px', fontWeight: '900', textTransform: 'uppercase' },
-  
-  // Profile
-  profileContainer: { display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '30px' },
-  avatarGlow: { padding: '3px', background: 'linear-gradient(45deg, #E50914, #000)', borderRadius: '50%', marginBottom: '15px', boxShadow: '0 0 20px rgba(229,9,20,0.2)' },
-  bigAvatar: { width: '100px', height: '100px', borderRadius: '50%', border: '4px solid #000', display: 'block' },
-  userName: { margin: '0 0 8px 0', fontSize: '18px', fontWeight: 'bold', letterSpacing: '1px' },
-  statusPill: { background: 'rgba(0, 255, 0, 0.1)', color: '#0f0', border: '1px solid #0f0', padding: '4px 10px', borderRadius: '20px', fontSize: '9px', fontWeight: 'bold' },
-  
-  // Top 8
-  top8Section: { flex: 1 },
-  sectionTitle: { fontSize: '11px', color: '#fff', borderBottom: '1px solid #222', paddingBottom: '8px', marginBottom: '15px', fontWeight: 'bold' },
-  top8Grid: { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px' },
-  friendBox: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', cursor: 'pointer' },
-  friendAvatar: { width: '45px', height: '45px', background: '#111', borderRadius: '6px', border: '1px solid #333', transition: 'border-color 0.2s', ':hover': { borderColor: '#E50914' } },
-  friendName: { fontSize: '9px', color: '#888' },
+const ArcanumStyles = () => (
+  <style>{`
+    :root {
+      --bg-color: #000000;
+      --panel-bg: #070707;
+      --border-color: #1a1a1a;
+      --accent-red: #E50914;
+      --text-main: #ffffff;
+      --text-muted: #666666;
+    }
 
-  // Chat
-  chatScroll: { flex: 1, overflowY: 'auto', padding: '25px' },
-  msgAuthor: { fontSize: '10px', color: '#666', marginBottom: '6px', fontWeight: 'bold' },
-  bubbleMe: { background: 'linear-gradient(90deg, #E50914, #B80710)', padding: '12px 18px', borderRadius: '15px 15px 0 15px', fontSize: '14px', maxWidth: '85%', boxShadow: '0 4px 15px rgba(229,9,20,0.2)' },
-  bubbleThem: { background: '#111', border: '1px solid #222', padding: '12px 18px', borderRadius: '0 15px 15px 15px', fontSize: '14px', maxWidth: '85%' },
-  chatForm: { display: 'flex', padding: '20px', background: '#050505', borderTop: '1px solid #1a1a1a' },
-  chatInput: { flex: 1, background: '#000', border: '1px solid #222', padding: '15px', color: '#fff', outline: 'none', borderRadius: '4px 0 0 4px', fontSize: '14px' },
-  btnSend: { background: '#E50914', color: '#fff', border: 'none', padding: '0 25px', fontWeight: '900', cursor: 'pointer', borderRadius: '0 4px 4px 0', letterSpacing: '1px' },
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    
+    body {
+      background-color: var(--bg-color);
+      color: var(--text-main);
+      font-family: 'Inter', system-ui, sans-serif;
+      overflow: hidden;
+      background-image: radial-gradient(circle at top, #110000 0%, #000 60%);
+    }
 
-  // Media Hub
-  nowPlayingCard: { background: '#000', border: '1px solid #222', padding: '20px', borderRadius: '6px', marginBottom: '25px', position: 'relative', overflow: 'hidden' },
-  nowPlayingHeader: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '15px' },
-  liveIndicator: { width: '8px', height: '8px', background: '#E50914', borderRadius: '50%', boxShadow: '0 0 10px #E50914' },
-  stationTitle: { margin: '0 0 5px 0', fontSize: '16px', color: '#fff' },
-  stationGenre: { margin: '0 0 15px 0', fontSize: '11px', color: '#666' },
-  audioPlayer: { width: '100%', height: '40px', outline: 'none' },
-  directorySection: { flex: 1, display: 'flex', flexDirection: 'column' },
-  directoryList: { overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '8px', paddingRight: '5px' },
-  stationItem: { display: 'flex', alignItems: 'center', gap: '15px', padding: '12px', borderRadius: '4px', cursor: 'pointer', transition: 'background 0.2s' },
-  playIcon: { width: '30px', height: '30px', background: '#111', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', color: '#E50914', border: '1px solid #222' },
+    .loading-screen, .login-screen {
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
 
-  // Misc
-  audioVisualizer: { display: 'flex', gap: '3px', alignItems: 'flex-end', height: '15px' },
-  bar: { width: '3px', background: '#E50914', animation: 'bounce 1s infinite alternate' },
-  btnOut: { background: 'transparent', color: '#666', border: '1px solid #333', padding: '8px 15px', fontSize: '10px', cursor: 'pointer', borderRadius: '2px', fontWeight: 'bold' },
-  loginBox: { textAlign: 'center', background: '#050505', padding: '60px', border: '1px solid #1a1a1a', borderRadius: '8px' },
-  loginLogo: { color: '#E50914', fontSize: '60px', fontWeight: '900', letterSpacing: '12px', margin: '0 0 10px 0', textShadow: '0 0 20px rgba(229,9,20,0.3)' },
-  loginSubtitle: { color: '#666', letterSpacing: '4px', fontSize: '12px', marginBottom: '40px' },
-  btnLogin: { background: '#fff', color: '#000', border: 'none', padding: '15px 40px', fontWeight: '900', cursor: 'pointer', fontSize: '14px', borderRadius: '2px' },
-  loader: { width: '40px', height: '40px', border: '3px solid #111', borderTopColor: '#E50914', borderRadius: '50%', animation: 'spin 1s linear infinite' }
-};
+    .login-card {
+      text-align: center;
+      background: var(--panel-bg);
+      padding: 60px;
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      box-shadow: 0 0 40px rgba(229,9,20,0.1);
+    }
+
+    .login-logo { font-size: 50px; font-weight: 900; color: var(--accent-red); letter-spacing: 10px; margin-bottom: 10px; text-shadow: 0 0 15px rgba(229,9,20,0.4); }
+    .login-sub { color: var(--text-muted); letter-spacing: 4px; font-size: 11px; margin-bottom: 40px; }
+    .btn-login { background: var(--text-main); color: var(--bg-color); border: none; padding: 15px 40px; font-weight: 900; cursor: pointer; border-radius: 2px; }
+
+    .os-layout { height: 100vh; display: flex; flex-direction: column; }
+    .top-nav { padding: 15px 30px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.8); backdrop-filter: blur(10px); }
+    .brand-group { display: flex; align-items: center; gap: 15px; }
+    .brand-logo { color: var(--accent-red); font-size: 24px; font-weight: 900; letter-spacing: 2px; }
+    .badge { background: var(--accent-red); color: #fff; font-size: 9px; padding: 4px 8px; font-weight: bold; border-radius: 2px; }
+    
+    .nav-controls { display: flex; align-items: center; gap: 20px; }
+    .secure-text { font-size: 10px; color: var(--text-muted); font-weight: bold; letter-spacing: 1px; }
+    .btn-outline { background: transparent; border: 1px solid var(--border-color); color: var(--text-muted); padding: 6px 12px; cursor: pointer; font-size: 10px; }
+
+    .main-grid { display: grid; grid-template-columns: 300px 1fr 340px; gap: 20px; padding: 20px 30px; flex: 1; overflow: hidden; }
+    .glass-panel { background: rgba(7,7,7,0.8); border: 1px solid var(--border-color); border-radius: 6px; display: flex; flex-direction: column; overflow: hidden; backdrop-filter: blur(10px); }
+    .panel-header { font-size: 10px; font-weight: bold; color: var(--text-muted); letter-spacing: 2px; padding: 20px; text-transform: uppercase; }
+
+    .profile-info { display: flex; flex-direction: column; align-items: center; padding: 0 20px 20px 20px; border-bottom: 1px solid var(--border-color); }
+    .main-avatar { width: 90px; height: 90px; border-radius: 50%; border: 2px solid var(--accent-red); padding: 3px; margin-bottom: 15px; background: #000; }
+    .user-name { font-size: 16px; font-weight: 900; margin-bottom: 8px; letter-spacing: 1px; }
+    .status-pill { border: 1px solid #0f0; color: #0f0; background: rgba(0,255,0,0.05); font-size: 9px; padding: 4px 12px; border-radius: 20px; font-weight: bold; }
+
+    .top8-container { flex: 1; display: flex; flex-direction: column; }
+    .top8-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; padding: 0 20px; }
+    .top8-card { display: flex; flex-direction: column; align-items: center; gap: 8px; cursor: pointer; }
+    .top8-avatar { width: 40px; height: 40px; background: #111; border: 1px solid #222; border-radius: 4px; transition: 0.2s; }
+    .top8-card:hover .top8-avatar { border-color: var(--accent-red); }
+    .top8-name { font-size: 9px; color: var(--text-muted); font-family: monospace; }
+
+    .chat-wrapper { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+    .chat-feed { flex: 1; padding: 20px; overflow-y: auto; }
+    .message-row { display: flex; flex-direction: column; margin-bottom: 20px; }
+    .message-row.me { align-items: flex-end; }
+    .message-row.them { align-items: flex-start; }
+    .msg-author { font-size: 9px; color: var(--text-muted); margin-bottom: 6px; font-weight: bold; text-transform: uppercase; }
+    .msg-bubble { padding: 12px 18px; font-size: 13px; line-height: 1.5; max-width: 85%; }
+    .me .msg-bubble { background: linear-gradient(135deg, #E50914, #B80710); color: #fff; border-radius: 12px 12px 0 12px; box-shadow: 0 5px 15px rgba(229,9,20,0.2); }
+    .them .msg-bubble { background: #111; border: 1px solid var(--border-color); color: #fff; border-radius: 0 12px 12px 12px; }
+
+    .chat-input-area { display: flex; background: #000; border-top: 1px solid var(--border-color); padding: 15px; }
+    .chat-input { flex: 1; background: #050505; border: 1px solid #222; color: #fff; padding: 12px 15px; border-radius: 2px 0 0 2px; outline: none; font-size: 13px; }
+    .btn-send { background: var(--accent-red); color: #fff; border: none; padding: 0 25px; font-weight: 900; cursor: pointer; border-radius: 0 2px 2px 0; font-size: 12px; }
+
+    .media-panel { padding-bottom: 0; }
+    .player-card { background: #000; border: 1px solid var(--border-color); margin: 0 20px 20px 20px; padding: 20px; border-radius: 4px; box-shadow: inset 0 0 20px rgba(0,0,0,0.5); }
+    .now-playing-badge { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; color: var(--accent-red); font-size: 9px; font-weight: 900; letter-spacing: 1px; }
+    .live-dot { width: 6px; height: 6px; background: var(--accent-red); border-radius: 50%; animation: pulse 1.5s infinite; }
+    .station-name { font-size: 14px; margin-bottom: 4px; font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .station-genre { font-size: 10px; color: var(--text-muted); margin-bottom: 15px; }
+    .audio-player { width: 100%; height: 35px; outline: none; }
+
+    .directory-list { flex: 1; overflow-y: auto; padding: 0 20px 20px 20px; display: flex; flex-direction: column; gap: 8px; }
+    .station-item { display: flex; align-items: center; gap: 12px; padding: 10px; background: transparent; border: 1px solid transparent; border-radius: 4px; cursor: pointer; transition: 0.2s; }
+    .station-item:hover { background: #111; border-color: #222; }
+    .active-station { border-left: 3px solid var(--accent-red); background: #0a0a0a; border-color: #1a1a1a; }
+    .play-btn { width: 28px; height: 28px; background: #111; display: flex; justify-content: center; align-items: center; border-radius: 50%; font-size: 9px; color: #fff; border: 1px solid #333; }
+    .active-station .play-btn { color: var(--accent-red); border-color: var(--accent-red); background: #220000; }
+    .station-title { font-size: 11px; font-weight: bold; margin-bottom: 2px; }
+    .station-sub { font-size: 9px; color: var(--text-muted); }
+
+    .custom-scroll::-webkit-scrollbar { width: 4px; }
+    .custom-scroll::-webkit-scrollbar-track { background: transparent; }
+    .custom-scroll::-webkit-scrollbar-thumb { background: #333; border-radius: 10px; }
+    .custom-scroll::-webkit-scrollbar-thumb:hover { background: var(--accent-red); }
+
+    .visualizer { display: flex; gap: 3px; align-items: flex-end; height: 12px; }
+    .bar { width: 3px; background: var(--accent-red); animation: bounce 0.8s infinite alternate; }
+    .bar:nth-child(2) { animation-delay: 0.2s; }
+    .bar:nth-child(3) { animation-delay: 0.4s; }
+
+    @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(229,9,20,0.4); } 70% { box-shadow: 0 0 0 4px rgba(229,9,20,0); } 100% { box-shadow: 0 0 0 0 rgba(229,9,20,0); } }
+    @keyframes bounce { 0% { height: 30%; } 100% { height: 100%; } }
+  `}</style>
+);
