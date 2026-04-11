@@ -65,7 +65,6 @@ const SynaptNetwork = ({ user }) => {
 
   // CARGA DE RADIO 100% EN ESPAÑOL
   useEffect(() => {
-    // Filtramos por idioma "spanish" y aumentamos el límite a 200 estaciones
     fetch('https://de1.api.radio-browser.info/json/stations/search?language=spanish&limit=200&order=clickcount&reverse=true&hidebroken=true')
       .then(res => res.json())
       .then(data => {
@@ -163,6 +162,7 @@ const SynaptNetwork = ({ user }) => {
           <div className="top8-container custom-scroll">
             <div className="panel-header">RADAR DE OPERADORES ({activeUsers.length})</div>
             <div className="top8-grid">
+              {activeUsers.length === 0 && <span style={{fontSize:'10px', color:'#666', gridColumn: 'span 4', textAlign: 'center'}}>Buscando...</span>}
               {activeUsers.map((u, i) => (
                 <div key={i} className="top8-card" onClick={() => openPrivateChat(u)}>
                   <div className="top8-avatar" style={{backgroundImage: `url(${u.photo || `https://api.dicebear.com/7.x/identicon/svg?seed=${u.uid}`})`}}>
@@ -254,10 +254,14 @@ const SynaptNetwork = ({ user }) => {
   );
 };
 
+// --- CHAT ROOM (CON SCROLL SEGURO Y LOCAL) ---
 const ChatRoom = ({ user, messages: globalMessages, targetUser, isPrivate }) => {
   const [input, setInput] = useState('');
   const [privateMessages, setPrivateMessages] = useState([]);
-  const dummy = useRef();
+  
+  // Referencia para controlar el scroll interno sin mover la página entera
+  const chatFeedRef = useRef(null); 
+  
   const chatId = isPrivate ? [user.uid, targetUser.uid].sort().join('_') : 'public_feed';
 
   useEffect(() => {
@@ -268,7 +272,13 @@ const ChatRoom = ({ user, messages: globalMessages, targetUser, isPrivate }) => 
   }, [chatId, isPrivate]);
 
   const displayMessages = isPrivate ? privateMessages : globalMessages;
-  useEffect(() => { dummy.current?.scrollIntoView({ behavior: 'smooth' }); }, [displayMessages]);
+
+  // Lógica de auto-scroll matemática y segura
+  useEffect(() => { 
+    if (chatFeedRef.current) {
+      chatFeedRef.current.scrollTop = chatFeedRef.current.scrollHeight;
+    }
+  }, [displayMessages]);
 
   const sendMsg = async (e, forceText = null) => {
     if (e) e.preventDefault();
@@ -293,7 +303,7 @@ const ChatRoom = ({ user, messages: globalMessages, targetUser, isPrivate }) => 
 
   return (
     <div className="chat-wrapper">
-      <div className="chat-feed custom-scroll">
+      <div className="chat-feed custom-scroll" ref={chatFeedRef}>
         {displayMessages?.map(m => (
           <div key={m.id} className={`message-row ${m.uid === user.uid ? 'me' : 'them'}`}>
             <div className="msg-author">{m.name}</div>
@@ -302,7 +312,6 @@ const ChatRoom = ({ user, messages: globalMessages, targetUser, isPrivate }) => 
             </div>
           </div>
         ))}
-        <div ref={dummy}></div>
       </div>
       <form onSubmit={(e) => sendMsg(e)} className="chat-input-area">
         <button type="button" onClick={handleSendImage} className="btn-media">📷</button>
@@ -393,6 +402,8 @@ const ArcanumStyles = () => (
     .cinema-hidden-notice { padding: 10px; text-align: center; background: #111; font-size: 10px; color: var(--text-muted); display: flex; justify-content: center; gap: 10px; align-items: center; }
     .btn-micro { background: transparent; border: 1px solid #333; color: #aaa; font-size: 9px; padding: 4px 8px; cursor: pointer; border-radius: 2px; }
 
+    .dynamic-area { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
     .chat-wrapper { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
     .chat-feed { flex: 1; padding: 15px; overflow-y: auto; }
     .message-row { display: flex; flex-direction: column; margin-bottom: 15px; }
@@ -424,6 +435,11 @@ const ArcanumStyles = () => (
     .station-item { display: flex; align-items: center; gap: 10px; padding: 8px; background: #050505; border-radius: 3px; cursor: pointer; }
     .active-station { border-left: 2px solid var(--accent-red); }
     .station-title { font-size: 10px; font-weight: bold; }
+
+    .custom-scroll::-webkit-scrollbar { width: 4px; height: 4px; }
+    .custom-scroll::-webkit-scrollbar-track { background: transparent; }
+    .custom-scroll::-webkit-scrollbar-thumb { background: #333; border-radius: 10px; }
+    .custom-scroll::-webkit-scrollbar-thumb:hover { background: var(--accent-red); }
 
     @media (min-width: 900px) {
       .mobile-nav { display: none; }
