@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import { auth, googleProvider, db } from './firebase';
 import { signInWithPopup, onAuthStateChanged, signOut } from 'firebase/auth';
-import { collection, addDoc, query, onSnapshot, orderBy, serverTimestamp, where, doc, getDocs } from 'firebase/firestore';
+import { collection, addDoc, query, onSnapshot, orderBy, serverTimestamp, deleteDoc, doc } from 'firebase/firestore';
 import EmojiPicker from 'emoji-picker-react';
 
 export default function App() {
@@ -13,133 +13,110 @@ export default function App() {
     return onAuthStateChanged(auth, (u) => { setUser(u); setLoading(false); });
   }, []);
 
-  if (loading) return <div style={css.centered}>DECRYPTING_ARCANUM_OS...</div>;
+  if (loading) return <div style={css.centered}>RESTORING_ARCANUM_SYSTEM...</div>;
 
   return (
     <Routes>
-      <Route path="/" element={user ? <Messenger user={user} /> : <Login />} />
+      <Route path="/" element={user ? <Dashboard user={user} /> : <Login />} />
     </Routes>
   );
 }
 
-const Messenger = ({ user }) => {
-  const [chats, setChats] = useState([]);
-  const [activeChat, setActiveChat] = useState(null);
-  const [messages, setMessages] = useState([]);
-  const [newMessage, setNewMessage] = useState('');
+const Dashboard = ({ user }) => {
+  const [text, setText] = useState('');
+  const [notes, setNotes] = useState([]);
+  const [newNote, setNewNote] = useState('');
   const [showEmoji, setShowEmoji] = useState(false);
-  const scrollRef = useRef();
 
-  // 1. CARGAR CHATS DONDE SOY PARTICIPANTE (Regla: request.auth.uid in resource.data.participants)
+  // FIRMA PERSONALIZADA PARA TUS REDES
+  const signature = `\n\n---\n📲 SYNAPT Network\nTelegram: @synapt_news\nWeb: synfm.online`;
+
+  // CARGAR TUS PROMPTS/NOTAS (Asegúrate de tener la colección 'users' creada)
   useEffect(() => {
-    const q = query(
-      collection(db, "chats"),
-      where("participants", "array-contains", user.uid)
-    );
+    if (!db || !user) return;
+    // Usamos la colección 'users' para que cumpla tu regla: allow read: if request.auth != null;
+    const q = query(collection(db, "users", user.uid, "notes"), orderBy("createdAt", "desc"));
     return onSnapshot(q, (snap) => {
-      setChats(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setNotes(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     });
-  }, [user.uid]);
+  }, [user]);
 
-  // 2. CARGAR MENSAJES DEL CHAT ACTIVO
-  useEffect(() => {
-    if (!activeChat) return;
-    const q = query(
-      collection(db, "chats", activeChat, "messages"),
-      orderBy("createdAt", "asc")
-    );
-    return onSnapshot(q, (snap) => {
-      setMessages(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      scrollRef.current?.scrollIntoView({ behavior: 'smooth' });
-    });
-  }, [activeChat]);
+  const saveNote = async () => {
+    if (!newNote.trim()) return;
+    try {
+      // Guardamos dentro de tu UID para que tus reglas permitan la escritura
+      await addDoc(collection(db, "users", user.uid, "notes"), {
+        content: newNote,
+        createdAt: serverTimestamp()
+      });
+      setNewNote('');
+    } catch (e) { alert("Error al guardar: Revisa los permisos de Firestore"); }
+  };
 
-  const handleSend = async (e) => {
-    e.preventDefault();
-    if (!newMessage.trim() || !activeChat) return;
-
-    await addDoc(collection(db, "chats", activeChat, "messages"), {
-      text: newMessage, 
-      senderId: user.uid,
-      senderName: user.displayName,
-      createdAt: serverTimestamp(),
-    });
-
-    setNewMessage('');
-    setShowEmoji(false);
+  const copyWithSignature = () => {
+    navigator.clipboard.writeText(text + signature);
+    alert("Contenido + Firma SYNAPT copiado.");
   };
 
   return (
     <div style={css.container}>
-      {/* SIDEBAR ESTILO WHATSAPP */}
-      <aside style={css.sidebar}>
-        <header style={css.sideHeader}>
-          <img src={user.photoURL} style={css.avatar} alt="me" />
-          <div style={{fontSize:'10px', color:'#E50914', fontWeight:'bold'}}>ARCANUM_SECURE</div>
-          <button onClick={() => signOut(auth)} style={css.btnOut}>✕</button>
-        </header>
-        
-        <div style={css.chatList}>
-          {chats.length === 0 ? (
-            <div style={{padding:'20px', color:'#444', fontSize:'11px'}}>No hay chats privados activos...</div>
-          ) : (
-            chats.map(c => (
-              <div 
-                key={c.id} 
-                style={{...css.chatItem, borderLeft: activeChat === c.id ? '4px solid #E50914' : 'none'}}
-                onClick={() => setActiveChat(c.id)}
-              >
-                <div style={css.statusDot}></div>
-                <div>
-                  <div style={{fontWeight:'bold', fontSize:'13px'}}>{c.chatName || "Chat Privado"}</div>
-                  <div style={{fontSize:'10px', color:'#444'}}>Mensaje Encriptado</div>
-                </div>
-              </div>
-            ))
-          )}
+      <nav style={css.nav}>
+        <h1 style={css.logo}>ARCANUM</h1>
+        <div style={{display:'flex', alignItems:'center', gap:'15px'}}>
+          <div style={{textAlign:'right', lineHeight:'1'}}>
+            <div style={{fontSize:'12px', fontWeight:'bold'}}>{user.displayName}</div>
+            <span style={{fontSize:'10px', color:'#E50914'}}>NETWORK_LEAD</span>
+          </div>
+          <button onClick={() => signOut(auth)} style={css.btnOut}>LOGOUT</button>
         </div>
-      </aside>
+      </nav>
 
-      {/* VENTANA DE MENSAJERÍA */}
-      <main style={css.mainChat}>
-        {activeChat ? (
-          <>
-            <header style={css.chatHeader}>
-              <span style={{color:'#E50914'}}>ENCRYPTED_CHANNEL:</span> {activeChat}
-            </header>
+      <main style={css.grid}>
+        {/* BLOQUE 1: EDITOR DE NOTICIAS 9:16 */}
+        <section style={css.card}>
+          <div style={css.cardHeader}>
+            <h3 style={css.redTitle}>GENERADOR EDITORIAL</h3>
+            <button style={css.btnSmall} onClick={() => setText('')}>LIMPIAR</button>
+          </div>
+          <textarea 
+            style={css.textarea} 
+            placeholder="Pega aquí el resultado de la IA para formatear..."
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+          />
+          <div style={css.flexGap}>
+            <button style={css.btnGrey} onClick={() => setShowEmoji(!showEmoji)}>😀</button>
+            <button style={css.btnRed} onClick={copyWithSignature}>COPIAR CON FIRMA</button>
+          </div>
+          {showEmoji && <div style={{marginTop:'15px'}}><EmojiPicker theme="dark" width="100%" onEmojiClick={(e)=>setText(text + e.emoji)} /></div>}
+        </section>
 
-            <div style={css.messageArea}>
-              {messages.map(m => (
-                <div key={m.id} style={m.senderId === user.uid ? css.rowSent : css.rowReceived}>
-                  <div style={m.senderId === user.uid ? css.bubbleSent : css.bubbleReceived}>
-                    <div style={css.bubbleText}>{m.text}</div>
-                  </div>
-                </div>
-              ))}
-              <div ref={scrollRef}></div>
-            </div>
-
-            <form onSubmit={handleSend} style={css.inputArea}>
-              <button type="button" onClick={() => setShowEmoji(!showEmoji)} style={css.emojiBtn}>😀</button>
+        {/* BLOQUE 2: CLOUD PROMPTS & IDEAS */}
+        <aside style={{display:'flex', flexDirection:'column', gap:'20px'}}>
+          <section style={css.card}>
+            <h3 style={css.whiteTitle}>PROMPTS GUARDADOS</h3>
+            <div style={{display:'flex', gap:'5px', marginBottom:'20px'}}>
               <input 
                 style={css.input} 
-                placeholder="Escribe un mensaje encriptado..." 
-                value={newMessage}
-                onChange={(e) => setNewMessage(e.target.value)}
+                placeholder="Guarda un prompt ganador..." 
+                value={newNote}
+                onChange={(e) => setNewNote(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && saveNote()}
               />
-              <button type="submit" style={css.sendBtn}>ENVIAR</button>
-            </form>
-
-            {showEmoji && (
-              <div style={css.emojiWrapper}>
-                <EmojiPicker theme="dark" width="100%" onEmojiClick={(e) => setNewMessage(newMessage + e.emoji)} />
-              </div>
-            )}
-          </>
-        ) : (
-          <div style={css.centered}>Selecciona un canal para desencriptar mensajes</div>
-        )}
+              <button style={css.btnRed} onClick={saveNote}>+</button>
+            </div>
+            <div style={css.scrollArea}>
+              {notes.map(n => (
+                <div key={n.id} style={css.noteCard}>
+                  <p style={{fontSize:'13px', whiteSpace:'pre-wrap'}}>{n.content}</p>
+                  <button onClick={() => deleteDoc(doc(db, "users", user.uid, "notes", n.id))} style={css.delBtn}>ELIMINAR</button>
+                </div>
+              ))}
+            </div>
+          </section>
+        </aside>
       </main>
+      <footer style={css.footer}>SYNAPT_NETWORK_SYSTEM_2026 | Powered by Neuro AI</footer>
     </div>
   );
 };
@@ -148,38 +125,33 @@ const Login = () => (
   <div style={css.centered}>
     <div style={css.loginBox}>
       <h1 style={css.bigLogo}>ARCANUM</h1>
-      <p style={{color:'#111', letterSpacing:'4px', marginBottom:'40px', fontSize:'10px'}}>AES_256_BIT_ENCRYPTION</p>
-      <button style={css.btnLogin} onClick={() => signInWithPopup(auth, googleProvider)}>
-        ACCEDER AL SISTEMA
-      </button>
+      <button style={css.btnLogin} onClick={() => signInWithPopup(auth, googleProvider)}>BYPASS ACCESS</button>
     </div>
   </div>
 );
 
 const css = {
-  container: { height: '100vh', display: 'flex', backgroundColor: '#000', color: '#fff', fontFamily: 'Inter, sans-serif' },
-  centered: { height: '100vh', flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#000', color: '#333', fontSize: '12px' },
-  sidebar: { width: '320px', borderRight: '1px solid #111', display: 'flex', flexDirection: 'column', backgroundColor: '#050505' },
-  sideHeader: { padding: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #111' },
-  avatar: { width: '32px', borderRadius: '50%', border: '1px solid #E50914' },
-  chatList: { flex: 1, overflowY: 'auto' },
-  chatItem: { padding: '20px', display: 'flex', gap: '15px', alignItems: 'center', cursor: 'pointer', background: '#0a0a0a', borderBottom: '1px solid #000' },
-  statusDot: { width: '8px', height: '8px', borderRadius: '50%', background: '#E50914', boxShadow: '0 0 5px #E50914' },
-  mainChat: { flex: 1, display: 'flex', flexDirection: 'column', position: 'relative' },
-  chatHeader: { padding: '20px', borderBottom: '1px solid #111', fontSize: '11px', fontWeight: 'bold', backgroundColor: '#000', letterSpacing: '1px' },
-  messageArea: { flex: 1, overflowY: 'auto', padding: '30px', display: 'flex', flexDirection: 'column', gap: '12px' },
-  rowSent: { alignSelf: 'flex-end', maxWidth: '75%' },
-  rowReceived: { alignSelf: 'flex-start', maxWidth: '75%' },
-  bubbleSent: { background: '#E50914', padding: '12px 16px', borderRadius: '15px 15px 0 15px' },
-  bubbleReceived: { background: '#111', padding: '12px 16px', borderRadius: '15px 15px 15px 0', border: '1px solid #222' },
-  bubbleText: { fontSize: '14px', lineHeight: '1.4' },
-  inputArea: { padding: '20px', display: 'flex', gap: '10px', background: '#000', borderTop: '1px solid #111' },
-  input: { flex: 1, background: '#080808', border: '1px solid #222', padding: '12px', color: '#fff', borderRadius: '4px', outline: 'none', fontSize: '14px' },
-  sendBtn: { background: '#E50914', color: '#fff', border: 'none', padding: '0 25px', fontWeight: '900', borderRadius: '2px', cursor: 'pointer', fontSize: '12px' },
-  emojiBtn: { background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer' },
-  emojiWrapper: { position: 'absolute', bottom: '85px', left: '20px', right: '20px', zIndex: 100 },
-  bigLogo: { color: '#E50914', fontSize: '55px', fontWeight: '900', letterSpacing: '10px' },
-  loginBox: { textAlign: 'center' },
-  btnLogin: { background: '#fff', color: '#000', border: 'none', padding: '15px 40px', fontWeight: '900', cursor: 'pointer', borderRadius: '2px', fontSize: '12px' },
-  btnOut: { background: 'none', border: 'none', color: '#333', cursor: 'pointer' }
+  container: { minHeight: '100vh', backgroundColor: '#000', color: '#fff', fontFamily: 'Inter, sans-serif' },
+  centered: { height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#000' },
+  nav: { display: 'flex', justifyContent: 'space-between', padding: '15px 4%', borderBottom: '1px solid #111' },
+  logo: { color: '#E50914', fontSize: '24px', fontWeight: '900', letterSpacing: '2px' },
+  bigLogo: { color: '#E50914', fontSize: '50px', fontWeight: '900', letterSpacing: '10px' },
+  grid: { display: 'grid', gridTemplateColumns: '1.6fr 1fr', gap: '25px', padding: '30px 4%' },
+  card: { background: '#0a0a0a', padding: '24px', borderRadius: '4px', border: '1px solid #1a1a1a' },
+  cardHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' },
+  textarea: { width: '100%', height: '400px', background: '#000', color: '#fff', border: '1px solid #222', padding: '15px', borderRadius: '4px', outline: 'none', fontSize: '15px' },
+  input: { flex: 1, background: '#000', color: '#fff', border: '1px solid #222', padding: '12px', borderRadius: '4px', outline: 'none' },
+  btnRed: { background: '#E50914', color: '#fff', border: 'none', padding: '10px 20px', fontWeight: 'bold', cursor: 'pointer' },
+  btnGrey: { background: '#222', color: '#fff', border: 'none', padding: '10px 15px', cursor: 'pointer' },
+  btnSmall: { background: 'none', border: 'none', color: '#333', fontSize: '10px', cursor: 'pointer' },
+  btnLogin: { background: '#fff', color: '#000', border: 'none', padding: '15px 40px', fontWeight: '900', cursor: 'pointer' },
+  btnOut: { background: 'none', border: 'none', color: '#444', fontSize: '10px', cursor: 'pointer' },
+  scrollArea: { maxHeight: '450px', overflowY: 'auto' },
+  noteCard: { background: '#000', borderLeft: '3px solid #E50914', padding: '15px', marginBottom: '10px', borderTop: '1px solid #111' },
+  delBtn: { background: 'none', border: 'none', color: '#E50914', fontSize: '10px', cursor: 'pointer', marginTop: '10px' },
+  redTitle: { color: '#E50914', fontSize: '12px', fontWeight: 'bold' },
+  whiteTitle: { color: '#fff', fontSize: '12px', fontWeight: 'bold', marginBottom: '20px' },
+  flexGap: { display: 'flex', gap: '10px' },
+  footer: { textAlign: 'center', padding: '60px', color: '#111', fontSize: '10px' },
+  loginBox: { textAlign: 'center' }
 };
